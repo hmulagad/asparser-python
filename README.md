@@ -1,5 +1,5 @@
 # asparser-python
-Analysis parser - Iteration1
+Analysis server parser - Iteration1
 
 This is a script which extracts and reads all the log and text files 
 to list the errors and warnings in the logs along with some configuration details from the AppInternals 10 appliance.
