@@ -47,6 +47,7 @@ def openfile(file):
 ##Connect to agentconfig database
 def dbconnect(path):
 
+    ##fileloc = os.path.join(r'files\var\lib\appinternals-yarder\lumberjack-svc-agentconfig\config\initial')
     fileloc = os.path.join('files/var/lib/appinternals-yarder/lumberjack-svc-agentconfig/config/initial')
     abspath = os.path.abspath(os.path.join('.',fileloc,'cfg_db'))
     
@@ -254,9 +255,10 @@ def hostname(conffile):
     fobj = openfile(conffile)
 
     fwrite = open(filename,'a')
+    fwrite.write('\n***** Hostname *****\n')
 
     for i in fobj:
-        fwrite.write('\nHostname : '+i)
+        fwrite.write('\n'+i)
 
     fwrite.close()
     fobj.close()
@@ -266,7 +268,8 @@ def lastreboot(conffile):
     fobj = openfile(conffile)
 
     fwrite = open(filename,'a')
-    fwrite.write('\nLast Reboot : '+fobj.readline())
+    fwrite.write('\n***** Last Reboot *****\n')
+    fwrite.write(fobj.readline())
     
     fwrite.close()
     fobj.close()
