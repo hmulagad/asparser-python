@@ -243,6 +243,7 @@ def version(conffile):
     fobj = openfile(conffile)
 
     fwrite = open(filename,'a')
+    fwrite.write('\n***** Version *****')
 
     for i in fobj:
         fwrite.write('\n'+i+'\n')
@@ -255,7 +256,7 @@ def hostname(conffile):
     fobj = openfile(conffile)
 
     fwrite = open(filename,'a')
-    fwrite.write('\n***** Hostname *****\n')
+    fwrite.write('\n***** Hostname *****')
 
     for i in fobj:
         fwrite.write('\n'+i)
@@ -277,7 +278,7 @@ def lastreboot(conffile):
 ##Function to list top 5 CPU using processes on AS    
 def procbycpu(conffile):
     fobj = openfile(conffile)
-    n = 6
+    n = 7
     
     fwrite = open(filename,'a')
     fwrite.write('\n***** Top CPU users ***** \n')
@@ -292,7 +293,7 @@ def procbycpu(conffile):
 ##Function to list top 5 memory using processes on AS        
 def procbymem(conffile):
     fobj = openfile(conffile)
-    n = 6
+    n = 7
 
     fwrite = open(filename,'a')
     fwrite.write('\n***** Top Mem users ***** \n')
@@ -397,6 +398,19 @@ def netstataon(conffile):
 
     fwrite.close()
     fobj.close()
+
+##Function to list of core files
+def cores(conffile):
+    fobj = openfile(conffile)
+
+    fwrite = open(filename,'a')
+    fwrite.write('\n***** Core files ***** \n')
+
+    for i in fobj:
+        fwrite.write(i)
+
+    fwrite.close()
+    fobj.close()
     
 ##Function to get configuration and other system details
 def configdetails(conffile):
@@ -433,6 +447,9 @@ def configdetails(conffile):
                                         else:
                                             if(conffile.find('netstat_-aon.txt')!=-1):
                                                 netstataon(conffile)
+                                            else:
+                                                if(conffile.find('corefiles.txt')!=-1):
+                                                    cores(conffile)
 
 
 ##Function to search for all Errors and Warnings in log files
