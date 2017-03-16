@@ -455,7 +455,7 @@ def configdetails(conffile):
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
 
-    searchstrings = ['ERROR','WARN']
+    searchstrings = ['ERROR','WARN','FATAL']
 
     try:
         fobj = open(logfile)
