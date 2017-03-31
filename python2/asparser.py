@@ -1,3 +1,16 @@
+#############################################################################################################
+##
+## 03/23/17 - Added agent count grouped by version,
+##            Changed processcountlist function to count(id) from count(*)
+##            Changed processcountlist function to use correct wording as process count and not agent count
+##            Added SEVERE in the list of search strings
+##
+## 03/25/17 - Added latest core files to be written to details output file along with total count of core files
+##
+## 03/28/17 - Python 2.x does support 'encoding' option for 'open(file, encoding='utf8')'. Removed encoding
+##            Find a way to open trace file with out encoding error.
+#############################################################################################################
+
 import os
 import re
 import sqlite3
@@ -42,6 +55,7 @@ def unzip(filepath):
 def openfile(file):
     print ('Reading file',file+'\n')
     fobj = open(file)
+##    fobj = open(file, encoding='utf8')
     return fobj
 
 ##Connect to agentconfig database
@@ -138,10 +152,26 @@ def processcount(conn,c):
 ##Get number of processcount by state
 def processcountlist(conn,c):
 
-    c.execute('SELECT state,count(*) as agentcount FROM process group by state order by state')
+    c.execute('SELECT state,count(id) as agentcount FROM process group by state order by state')
 
     list = c.fetchall()
-    msg = 'Agentcount by state : '
+    msg = 'Process count by state : '
+
+    writefile(filename,str(' '),msg)
+
+    for x in range(0,len(list)):
+        msg = ' '
+        writefile(filename,list[x],msg)
+
+    return list
+
+##Get number of agents based on version
+def agtcntversion(conn,c):
+
+    c.execute('SELECT version, count(id) as agentcount  FROM agent group by version order by version')
+
+    list = c.fetchall()
+    msg = 'Agent count by version : '
 
     writefile(filename,str(' '),msg)
 
@@ -217,8 +247,9 @@ def navigatefolders():
         for logfile in filelist:
             for foldername in folderstoread:
                 if foldername in logfile:
-                    print('Processing ',logfile)
-                    errorsandwarns(logfile)
+                    if logfile.find('coretrace')==-1:
+                        print('Processing ',logfile)
+                        errorsandwarns(logfile)
 
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
@@ -234,7 +265,7 @@ def navigatefolders():
 ##
 ##    except FileNotFoundError:
 ##        print(conffile,'File does not exist...\n')
-        
+
     for conffile in configfiles:
         configdetails(conffile)
 
@@ -401,14 +432,34 @@ def netstataon(conffile):
 
 ##Function to list of core files
 def cores(conffile):
+    corefilelist = []
+    corefilecnt = 0
+    dict = {}
+    
     fobj = openfile(conffile)
 
     fwrite = open(filename,'a')
     fwrite.write('\n***** Core files ***** \n')
 
+##Get count of core files and write the total count
     for i in fobj:
-        fwrite.write(i)
+        corefilecnt = corefilecnt + 1
+        corefilelist.append(i)
+        
+    fwrite.write('total '+str(corefilecnt))
 
+##Adding latest core files to a dictionary
+    for s in corefilelist:
+        x = s.split(':')
+        dict.update({x[0]:x[1]})
+
+
+##Writing latest core file details to output file
+    fwrite.write('\nLatest core files : \n')
+    for key,value in dict.items():
+        fwrite.write(key+':'+value+'(yyyy-mm-dd hh)'+'\n')
+
+        
     fwrite.close()
     fobj.close()
     
@@ -455,7 +506,7 @@ def configdetails(conffile):
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
 
-    searchstrings = ['ERROR','WARN','FATAL']
+    searchstrings = ['SEVERE','ERROR','WARN','FATAL']
 
     try:
         fobj = open(logfile)
@@ -491,6 +542,7 @@ def main():
         agentcount(conn,c)
         agentsonline(conn,c)
         agentsonffline(conn,c)
+        agtcntversion(conn,c)
 
         processcount(conn,c)
         processcountlist(conn,c)
