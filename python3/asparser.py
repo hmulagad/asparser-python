@@ -9,6 +9,13 @@
 ##
 ## 03/28/17 - Python 2.x does support 'encoding' option for 'open(file, encoding='utf8')'. Removed encoding
 ##            Find a way to open trace file with out encoding error.
+##
+## 03/31/17 - Added silostatus function to check if status of stitcher/aggregator input buffer is keeping up
+##            or lagging. Anything which has GiB should be an issue. Few hundred MB should be fine.
+##            Added 'HTTPError' as on of the search words
+##
+## 04/03/17 - Added section to write latest purge details from silo_dispatch.log
+##
 #############################################################################################################
 
 import os
@@ -250,7 +257,10 @@ def navigatefolders():
                     if logfile.find('coretrace')==-1:
                         print('Processing ',logfile)
                         errorsandwarns(logfile)
-
+                        if ((logfile.find('silo_dispatch-performance.log')!=-1) or (logfile.find('silo_dispatch.log')!=-1)):
+                            silostatus(logfile)
+                            
+                            
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
 
@@ -462,6 +472,50 @@ def cores(conffile):
         
     fwrite.close()
     fobj.close()
+
+##Function to get latest status of silo statistics
+def silostatus(logfile):
+    silostats = {}
+
+    fobj = openfile(logfile)
+    fwrite = open(filename,'a')
+
+    if(logfile.find('silo_dispatch-performance.log')!=-1):
+        fwrite.write('\n****** Stitcher/Aggregator input buffer ***** \n')
+
+        for line in fobj:
+            if(line.find('JOURNAL_DIR_STITCHER_IN')!=-1):
+                x = line.split(':')
+                silostats.update({x[0]:x[1]})
+            else:
+                if (line.find('JOURNAL_DIR_AGGR')!=-1):
+                    x = line.split(':')
+                    silostats.update({x[0]:x[1]})
+                else:
+                    if(line.find('DB:APP:')!=-1):
+                        x = line.split('DB:')
+                        silostats.update({x[0]:x[1]})
+                        
+        for key,value in silostats.items():
+            if key.find('JOURNAL')!=-1:
+                if value.find('GiB') != -1:
+                    fwrite.write('Might be lagging in processing data..'+key+'-'+value)
+                else:
+                    fwrite.write('(OK) '+key+'-'+value)
+            else:
+                fwrite.write('Number of Records: '+value)
+    else:
+        lines = fobj.readlines()
+        purge_details=lines[-15:]
+
+        fwrite.write('\n****** Latest purge details ***** \n')
+        for x in purge_details:
+            if ((x.find('DIAG:')!=-1) or x.find('Retired')!=-1):
+                fwrite.write(x)
+
+    fwrite.close()
+    fobj.close()
+    
     
 ##Function to get configuration and other system details
 def configdetails(conffile):
@@ -506,7 +560,7 @@ def configdetails(conffile):
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
 
-    searchstrings = ['SEVERE','ERROR','WARN','FATAL']
+    searchstrings = ['SEVERE','ERROR','WARN','FATAL','HTTPError']
 
     try:
         fobj = open(logfile)
@@ -533,8 +587,6 @@ def main():
     path = input()
 
     unzip(path)
-    dbconnect(path)
-
     conn, c = dbconnect(path)
 
     if ((conn != ' ') and (c !=' ')):
