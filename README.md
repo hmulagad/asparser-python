@@ -1,22 +1,26 @@
 # asparser-python
-Analysis server parser - Iteration1
+sysdumpanalyzer for AIX10
 
-This is a script which extracts and reads all the log and text files 
-to list the errors and warnings in the logs along with some configuration details from the AppInternals 10 appliance.
+What the script does?
 
-The script generates 2 output files after it finishes running and leaves the extracted bundle files/folders. 
-The 2 output files will be named - errorsandwarns.txt and analysisserverdetails.txt.
+The script extracts the sysdump file and reads all the logs and config files to gather system information and also errors and warnings in the log files present in the sysdump.
 
-Steps on running the script:
+The script when completed succesfully will generate 2 files - 2 .txt files
 
-Install Python 2.7 or higher or place the script where you have python installed Run the script and it enter the location of the system dump from AppInternals 10 appliance.
-The script will unzip the sysdump in the same location where you placed the script. 
-The script will also create the 2 output files mentioned above in the same location where the script is located.
+Text Files - xxxxx_analysisserverdetails.txt and xxxxx_errorsandwarns.txt
 
-NOTE:
+What do the output files contain?
 
---Please use script in python2 if you are running python version 2.7 or higher but lower than 3.0 
---Please use script in python3 if you are running python version 3.0.
+xxxxx_errorsandwarns.txt - Contains ERRORS, WARNINGS in all the logs files inside the sysdump xxxxx_analysisserverdetails.txt - Contains system level details from the AIX10 Analysis server
 
---The script when ran will delete all folders and .txt files from previous run,
-please make sure you save the unzipped folders/files and output files before analyzing a new system dump.
+How do we run the script?
+
+You can either use Python 2.x(x >=7) or Python 3.x to run the script. Please downloand the appropriate file as we have separate files for Python 2.x and Python 3.x.
+
+-- Place the script which you have downloaded in a folder (DO NOT PLACE THE SCRIPT IN THE SAME LOCATION AS SYSDUMPS) 
+-- Run the script using python command 
+-- Enter the fullpath along with sysdump file name 
+-- Enter the case number associated with sysdump 
+-- Hit enter and let the script run
+
+The output files should be created in the same location where the sysdump is located
