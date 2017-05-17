@@ -8,14 +8,20 @@
 ## 03/25/17 - Added latest core files to be written to details output file along with total count of core files
 ##
 ## 03/28/17 - Python 2.x does support 'encoding' option for 'open(file, encoding='utf8')'. Removed encoding
-##            Find a way to open trace file with out encoding error.
+##            Find a way to open trace file with out encoding error
 ##
 ## 03/31/17 - Added silostatus function to check if status of stitcher/aggregator input buffer is keeping up
-##            or lagging. Anything which has GiB should be an issue. Few hundred MB should be fine.
+##            or lagging. Anything which has GiB should be an issue. Few hundred MB should be fine
 ##            Added 'HTTPError' as on of the search words
 ##
 ## 04/03/17 - Added section to write latest purge details from silo_dispatch.log
 ##
+## 04/14/17 - Added case number to be entered which is appended to output files
+##            Cleaning up unzipped folder
+##            Moving output files to location of the dump file
+##            If the file exists remove the existing file and move the new file
+## 04/14/17 - Ran into 'UnicodeDecodeError' while reading a file from AR11 sysdump
+##            Added try catch block to catch the exception and skip the file which have different encoding
 #############################################################################################################
 
 import os
@@ -24,10 +30,6 @@ import sqlite3
 import zipfile
 import shutil
 
-global filename
-global errorandwarn
-filename = 'analysisserverdetails.txt'
-errorandwarn = 'errorsandwarns.txt'
 
 ##Delete all previously extracted folders
 def cleanup():
@@ -41,7 +43,6 @@ def cleanup():
             print('Deleting folder',os.path.abspath(fdname))
             shutil.rmtree(os.path.abspath(fdname),ignore_errors=False)
 
-    print('Removing prior',filename)
 
     for fname in os.listdir(cwd):
         if fname.endswith('.txt'):
@@ -567,24 +568,52 @@ def errorsandwarns(logfile):
         fwrite = open(errorandwarn,'a')
         fwrite.write('\n'+'******Errors and Warnings in file '+ str(logfile)+'******' + '\n\n')
 
-        for i in fobj:
-            for string in searchstrings:
-                if string in i.strip():
-                    fwrite.write(i)
+        try:
+            for i in fobj:
+                for string in searchstrings:
+                    if string in i.strip():
+                        fwrite.write(i)
 
-        fobj.close()
-        fwrite.close()
+            fobj.close()
+            fwrite.close()
+
+        except UnicodeDecodeError:
+            print('Skipping ',logfile)
             
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
+
+##Function to move files to location where the bundle is present
+def movefiles(path):
+    cwd = os.getcwd()
+    dst = os.path.abspath(os.path.dirname(path))
+    
+    for file in os.listdir(os.getcwd()):
+        filelist = (os.path.join(os.path.abspath(file),dst))
+        if (file.endswith('.txt') and (file.find('errorsandwarns')!=-1 or file.find('analysisserverdetails')!=-1)):
+            try:
+                print('Moving '+os.path.abspath(file)+' to '+dst)
+                shutil.move(os.path.abspath(file),dst)
+            except IOError:
+                 print(file+' already exists...Removing file')
+                 os.remove(os.path.join(dst,file))
+                 shutil.move(os.path.abspath(file),dst)        
     
 ##Main function
 def main():
+    global filename
+    global errorandwarn    
 
     cleanup()
     
     print('Enter the full path to AS bundle zip file :')
     path = raw_input()
+
+    print('Enter the case number :')
+    casenum = raw_input()
+
+    filename = str(casenum)+'_'+'analysisserverdetails.txt'
+    errorandwarn = str(casenum)+'_'+'errorsandwarns.txt'
 
     unzip(path)
     conn, c = dbconnect(path)
@@ -605,6 +634,9 @@ def main():
 
         
         dbclose(conn)
+
     navigatefolders()
+    movefiles(path)
+    cleanup()
     
 main()
