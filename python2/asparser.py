@@ -22,6 +22,9 @@
 ##            If the file exists remove the existing file and move the new file
 ## 04/14/17 - Ran into 'UnicodeDecodeError' while reading a file from AR11 sysdump
 ##            Added try catch block to catch the exception and skip the file which have different encoding
+## 05/19/17 - Added check for case number. If entered case number is not numeric do not proceed until
+##            until valid numeric value is enetered
+## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
 #############################################################################################################
 
 import os
@@ -609,8 +612,12 @@ def main():
     print('Enter the full path to AS bundle zip file :')
     path = raw_input()
 
-    print('Enter the case number :')
-    casenum = raw_input()
+    while True:
+        print('Enter valid case number :')
+        casenum = raw_input()
+
+        if casenum.isdigit():
+            break
 
     filename = str(casenum)+'_'+'analysisserverdetails.txt'
     errorandwarn = str(casenum)+'_'+'errorsandwarns.txt'
