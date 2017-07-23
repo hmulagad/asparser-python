@@ -25,6 +25,15 @@
 ## 05/19/17 - Added check for case number. If entered case number is not numeric do not proceed until
 ##            until valid numeric value is enetered
 ## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
+##
+## 07/23/17 - Errors in upgrade.log now in errorandwarns file.
+#############################################################################################################
+
+#############################################################################################################
+                                    ##########TO DO##########
+
+## ENH-1 - If the error/warning is repeating, write the error/warn once and count on how many time it occurred in that day
+
 #############################################################################################################
 
 import os
@@ -564,7 +573,10 @@ def configdetails(conffile):
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
 
-    searchstrings = ['SEVERE','ERROR','WARN','FATAL','HTTPError']
+    if(logfile.find('upgrade.log')!=-1):
+        searchstrings = ['Error:']
+    else:
+        searchstrings = ['SEVERE','ERROR','WARN','FATAL','HTTPError']
 
     try:
         fobj = open(logfile)
