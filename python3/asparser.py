@@ -25,8 +25,10 @@
 ## 05/19/17 - Added check for case number. If entered case number is not numeric do not proceed until
 ##            until valid numeric value is enetered
 ## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
-##
 ## 07/23/17 - Errors in upgrade.log now in errorandwarns file.
+## 08/01/17 - Added logic to check JOURNAL_DIR_STX_STORE_IN buffer to see if processing of data is lagging
+##
+##
 #############################################################################################################
 
 #############################################################################################################
@@ -497,7 +499,7 @@ def silostatus(logfile):
         fwrite.write('\n****** Stitcher/Aggregator input buffer ***** \n')
 
         for line in fobj:
-            if(line.find('JOURNAL_DIR_STITCHER_IN')!=-1):
+            if(line.find('JOURNAL_DIR_STITCHER_IN')!=-1 or line.find('JOURNAL_DIR_STX_STORE_IN')!=-1):
                 x = line.split(':')
                 silostats.update({x[0]:x[1]})
             else:
