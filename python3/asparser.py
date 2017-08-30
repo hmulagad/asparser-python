@@ -27,8 +27,7 @@
 ## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
 ## 07/23/17 - Errors in upgrade.log now in errorandwarns file.
 ## 08/01/17 - Added logic to check JOURNAL_DIR_STX_STORE_IN buffer to see if processing of data is lagging
-##
-##
+## 08/27/17 - Added logic to get the appliance type from the ljsystem file.
 #############################################################################################################
 
 #############################################################################################################
@@ -488,6 +487,29 @@ def cores(conffile):
     fwrite.close()
     fobj.close()
 
+##Function to get the appliance type
+def appliancetype(conffile):
+
+    fobj = openfile(conffile)
+
+    fwrite = open(filename,'a')
+    fwrite.write('\n***** Appliance type *****\n')
+
+    for i in fobj:
+        if(i.find('"install_type":')!=-1):
+            x = i[i.index(':'):]
+
+    if x.find('vm')!=-1:
+        fwrite.write('Virtual Machine\n')
+    elif x.find('azure')!=-1:
+        fwrite.write('Microsoft Azure\n')
+    elif x.find('linux')!=-1:
+        fwrite.write('Linux Installer\n')
+    elif x.find('amazon')!=-1 and x.find('saas')==-1:
+        fwrite.write('Amazon\n')
+    elif x.find('saas')!=-1:
+        fwrite.write('SaaS\n')
+
 ##Function to get latest status of silo statistics
 def silostatus(logfile):
     silostats = {}
@@ -570,8 +592,11 @@ def configdetails(conffile):
                                             else:
                                                 if(conffile.find('corefiles.txt')!=-1):
                                                     cores(conffile)
+                                                else:
+                                                    if(conffile.find('lj.machine.json.txt')!=-1):
+                                                        appliancetype(conffile)
 
-
+                    
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
 
