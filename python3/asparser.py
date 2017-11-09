@@ -636,7 +636,7 @@ def movefiles(path):
             try:
                 print('Moving '+os.path.abspath(file)+' to '+dst)
                 shutil.move(os.path.abspath(file),dst)
-            except IOError:
+            except Exception as e:
                  print(file+' already exists...Removing file')
                  os.remove(os.path.join(dst,file))
                  shutil.move(os.path.abspath(file),dst)        
