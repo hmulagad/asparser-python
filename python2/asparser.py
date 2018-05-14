@@ -1,4 +1,6 @@
 #############################################################################################################
+## Author: Harikishan Mulagada
+## Role  : Staff Engineer SteelCentral
 ##
 ## 03/23/17 - Added agent count grouped by version,
 ##            Changed processcountlist function to count(id) from count(*)
@@ -27,7 +29,10 @@
 ## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
 ## 07/23/17 - Errors in upgrade.log now in errorandwarns file.
 ## 08/01/17 - Added logic to check JOURNAL_DIR_STX_STORE_IN buffer to see if processing of data is lagging
-## 08/27/17 - Added logic to get the appliance type from the ljsystem file.
+## 08/27/17 - Added logic to get the appliance type from the ljsystem file
+## 04/30/17 - Added logic to get the silo settings from the lj.silosettings file
+## 05/07/17 - Added logic to generate the WEBLINKS for the output files
+## 05/08/17 - Added logic to get the count of transaction type defined
 #############################################################################################################
 
 #############################################################################################################
@@ -42,7 +47,7 @@ import re
 import sqlite3
 import zipfile
 import shutil
-
+import json
 
 ##Delete all previously extracted folders
 def cleanup():
@@ -293,6 +298,7 @@ def navigatefolders():
     for conffile in configfiles:
         configdetails(conffile)
 
+
 ##Function to get appinternals AS version
 def version(conffile):
     fobj = openfile(conffile)
@@ -421,7 +427,8 @@ def syctlstatus(conffile):
     fwrite.write('\n***** Supervisor service status ***** \n')
 
     for i in fobj:
-        fwrite.write(str(i[:i.index(',')])+'\n')
+        fwrite.write(str(i)+'\n')
+        ##fwrite.write(str(i[:i.index(',')])+'\n')
 
     fwrite.close()
     fobj.close()
@@ -499,16 +506,19 @@ def appliancetype(conffile):
         if(i.find('"install_type":')!=-1):
             x = i[i.index(':'):]
 
-    if x.find('vm')!=-1:
-        fwrite.write('Virtual Machine\n')
-    elif x.find('azure')!=-1:
-        fwrite.write('Microsoft Azure\n')
-    elif x.find('linux')!=-1:
-        fwrite.write('Linux Installer\n')
-    elif x.find('amazon')!=-1 and x.find('saas')==-1:
-        fwrite.write('Amazon\n')
-    elif x.find('saas')!=-1:
-        fwrite.write('SaaS\n')
+            if len(x)>0:
+                if x.find('vm')!=-1:
+                    fwrite.write('Virtual Machine\n')
+                elif x.find('azure')!=-1:
+                    fwrite.write('Microsoft Azure\n')
+                elif x.find('linux')!=-1:
+                    fwrite.write('Linux Installer\n')
+                elif x.find('amazon')!=-1 and x.find('saas')==-1:
+                    fwrite.write('Amazon\n')
+                elif x.find('saas')!=-1:
+                    fwrite.write('SaaS\n')
+            else:
+                print('The file is empty... ',conffile)
 
 ##Function to get latest status of silo statistics
 def silostatus(logfile):
@@ -552,7 +562,125 @@ def silostatus(logfile):
 
     fwrite.close()
     fobj.close()
-    
+
+##Function to get the silo settings
+def silo_settings(logfile):
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		fwrite.write('\n****** Silo Settings ******\n')
+
+
+		for line in fobj:
+			if (line.find('aggr_utx_thrds')!=-1 or line.find('max_parser_processes')!=-1 or line.find('aggr_stx_thrds')!=-1 or line.find('max_indexer_processes')!=-1):
+				fwrite.write((str(line).strip()).strip(',')+'\n')
+
+		fobj.close()
+		fwrite.close()
+
+	except Exception as e:
+		print(e)
+
+##Function to get the count of transaction types defined
+def txntypes(logfile):
+	try:
+		config  = json.load(open(logfile))
+		txncnt = 0
+		fwrite = open(filename,'a')
+
+		for ttype in config['items']:
+			if ttype['id']!='':
+				txncnt+=1
+		
+		fwrite.write('\n***** Number of Transaction Types Defined ******\n')
+		fwrite.write(str(txncnt)+'\n')
+
+		fwrite.close()
+		return
+
+	except Exception as e:
+		print(e)
+		
+
+##Function to get the count of applications defined
+def definedapps(logfile):
+	try:
+		config = json.load(open(logfile))
+		apps = 0
+		fwrite = open(filename,'a')
+
+		for app in config['items']:
+			if app['id']!='':
+				apps+=1
+
+		fwrite.write('\n***** Number of applications defined *****\n')
+		fwrite.write(str(apps)+'\n')
+
+		fwrite.close()
+		return
+
+	except Exception as e:
+		print(e)
+
+##Function to get resource information
+def resourceinfo(logfile):
+	global totalmem
+	global cores
+
+	try:
+		if logfile.find('system.meminfo.txt')!=-1:
+			totalmem = memory(logfile)
+			##print(totalmem)
+		elif logfile.find('system.num_cpu_cores.txt')!=-1:
+			cores = cpucores(logfile)
+			##print(cores)
+
+		##fwrite = open(filename,'a')
+		##fwrite.write('\n*****Resource Information *****\n')
+
+		##fwrite.write('Total Physical Memory: '+str(totalmem).strip('')+'\n')
+		##fwrite.write('Total Cores Available: '+str(cores).strip('')+'\n')
+		return totalmem,cores
+	except Exception as e:
+		print(e)
+
+##Function to get total memory for Resource Information
+def memory(logfile):
+	try:
+		fobj = openfile(logfile)
+		
+		for line in fobj:
+			if line.find('MemTotal:')!=-1:
+				x = line.split(':')
+		fobj.close()
+		return x[1]
+	except Exception as e:
+		print(e)
+
+##Function to get number of cores for Resource Information
+def cpucores(logfile):
+	try:
+		fobj = openfile(logfile)
+		line = fobj.readlines()
+		x = str(line[0]).split(':')
+
+		fobj.close()
+		return x[1]
+	except Exception as e:
+		print(e)
+
+##Function to write Resource information
+def writeresourceinfo(cores,totalmem):
+	try:
+		fwrite = open(filename,'a')
+		fwrite.write('\n *****Resource Information ***** \n')
+		fwrite.write('Total Physical Memory: '+str(totalmem).strip('')+'\n')
+                fwrite.write('Total Cores Available: '+str(cores).strip('')+'\n')
+		
+		fwrite.close()
+	except Exception as e:
+		print(e)
     
 ##Function to get configuration and other system details
 def configdetails(conffile):
@@ -595,7 +723,19 @@ def configdetails(conffile):
                                                 else:
                                                     if(conffile.find('lj.machine.json.txt')!=-1):
                                                         appliancetype(conffile)
-
+						    else:
+							if(conffile.find('lj.silo_settings.json.txt')!=-1):
+								silo_settings(conffile)
+							else:
+							    if(conffile.find('lj.transaction_types_ALL.json.txt')!=-1):
+								txntypes(conffile)
+							    else:
+								if(conffile.find('lj.application_definitions.json.txt')!=-1):
+									definedapps(conffile)
+								else:
+								    if(conffile.find('system.meminfo.txt')!=-1 or conffile.find('system.num_cpu_cores.txt')!=-1):
+									resourceinfo(conffile)
+	return
                     
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
@@ -640,11 +780,36 @@ def movefiles(path):
                  print(file+' already exists...Removing file')
                  os.remove(os.path.join(dst,file))
                  shutil.move(os.path.abspath(file),dst)        
+
+##Function to generate weblinks for output files
+def weblinks(path,filename,errorandwarn):
+	baseURL = 'http://support.nbttech.com/'
+	sysURL = ''
+	errURL = ''
+
+	tmpPath = str(os.path.dirname(path))[str(os.path.dirname(path)).index('data/'):]
+
+	sysURL = baseURL+tmpPath+'/'+filename
+	errURL = baseURL+tmpPath+'/'+errorandwarn
+	logURL = baseURL+tmpPath
+
+	print('Creating Web Link to files...\n')
+	print('*****************************\n')
+	print('    WEB LINKS                \n')
+
+	print('Browse Logs: '+logURL+'\n')
+	print('Analysis Server Details: '+sysURL+'\n')
+	print('Errors log: '+errURL+'\n')
+
+	print('\n*****************************\n')
+
     
 ##Main function
 def main():
     global filename
     global errorandwarn    
+    global cores
+    global totalmem
 
     cleanup()
     
@@ -684,5 +849,5 @@ def main():
     navigatefolders()
     movefiles(path)
     cleanup()
-    
+    weblinks(path,filename,errorandwarn)
 main()
