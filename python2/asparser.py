@@ -33,6 +33,8 @@
 ## 04/30/17 - Added logic to get the silo settings from the lj.silosettings file
 ## 05/07/17 - Added logic to generate the WEBLINKS for the output files
 ## 05/08/17 - Added logic to get the count of transaction type defined
+## 05/15/17 - Logic to extract contents of the zip in place and creating output files as needed
+##            create directory function exists to implement unzipping to newly created folder, for future changes
 #############################################################################################################
 
 #############################################################################################################
@@ -48,16 +50,36 @@ import sqlite3
 import zipfile
 import shutil
 import json
+import time
+
+start = time.time()
+
+##Function to create a directory to extract the zip file
+def createdir(filepath):
+	try:
+		print('Creating folder to extract... ')
+		os.chdir(os.path.dirname(os.path.abspath(filepath)))
+
+		workdir = os.path.abspath(os.path.dirname(os.path.abspath(filepath))+'/'+os.path.basename(filepath).split('.zip')[0])
+		if not os.path.exists(workdir):
+			os.makedirs(workdir)
+	except OSError as e:
+		if e.errno !=errno.EEXIST:
+			raise
+	return workdir
 
 ##Delete all previously extracted folders
-def cleanup():
+def cleanup(filepath):
 
+    os.chdir(os.path.dirname(os.path.abspath(filepath)))
+    extrctdir = os.path.basename(filepath).split('.zip')[0]
+    folderstodelete = ['appserver_logs','commands','cores','files',extrctdir]
     cwd = os.getcwd()
-
+##    cwd = os.chdir(os.path.dirname(os.path.abspath(filepath)))
     print('Deleting folders...')
     
     for fdname in os.listdir(cwd):
-        if os.path.isdir(os.path.abspath(fdname)):
+        if (os.path.isdir(os.path.abspath(fdname)) and (fdname in folderstodelete)):
             print('Deleting folder',os.path.abspath(fdname))
             shutil.rmtree(os.path.abspath(fdname),ignore_errors=False)
 
@@ -297,7 +319,6 @@ def navigatefolders():
 
     for conffile in configfiles:
         configdetails(conffile)
-
 
 ##Function to get appinternals AS version
 def version(conffile):
@@ -582,6 +603,22 @@ def silo_settings(logfile):
 	except Exception as e:
 		print(e)
 
+##Function to get resource information - #cores, memory details etc
+def resourceinfo(logfile):
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		fwrite.write('\n*****Resource Details *****\n')
+
+		for line in fobj:
+			if ((line.find('MemTotal:')!=-1 or line.find('MemFree:')!=-1 or line.find('system.cpu cores :')!=-1 or line.find('system.num_processors:')!=-1)and line.find('#')==-1):
+				fwrite.write(str(line).strip(' '))
+		fobj.close()
+		fwrite.close()
+	except Exception as e:
+		print(e)
+
 ##Function to get the count of transaction types defined
 def txntypes(logfile):
 	try:
@@ -620,65 +657,6 @@ def definedapps(logfile):
 		fwrite.close()
 		return
 
-	except Exception as e:
-		print(e)
-
-##Function to get resource information
-def resourceinfo(logfile):
-	global totalmem
-	global cores
-
-	try:
-		if logfile.find('system.meminfo.txt')!=-1:
-			totalmem = memory(logfile)
-			##print(totalmem)
-		elif logfile.find('system.num_cpu_cores.txt')!=-1:
-			cores = cpucores(logfile)
-			##print(cores)
-
-		##fwrite = open(filename,'a')
-		##fwrite.write('\n*****Resource Information *****\n')
-
-		##fwrite.write('Total Physical Memory: '+str(totalmem).strip('')+'\n')
-		##fwrite.write('Total Cores Available: '+str(cores).strip('')+'\n')
-		return totalmem,cores
-	except Exception as e:
-		print(e)
-
-##Function to get total memory for Resource Information
-def memory(logfile):
-	try:
-		fobj = openfile(logfile)
-		
-		for line in fobj:
-			if line.find('MemTotal:')!=-1:
-				x = line.split(':')
-		fobj.close()
-		return x[1]
-	except Exception as e:
-		print(e)
-
-##Function to get number of cores for Resource Information
-def cpucores(logfile):
-	try:
-		fobj = openfile(logfile)
-		line = fobj.readlines()
-		x = str(line[0]).split(':')
-
-		fobj.close()
-		return x[1]
-	except Exception as e:
-		print(e)
-
-##Function to write Resource information
-def writeresourceinfo(cores,totalmem):
-	try:
-		fwrite = open(filename,'a')
-		fwrite.write('\n *****Resource Information ***** \n')
-		fwrite.write('Total Physical Memory: '+str(totalmem).strip('')+'\n')
-                fwrite.write('Total Cores Available: '+str(cores).strip('')+'\n')
-		
-		fwrite.close()
 	except Exception as e:
 		print(e)
     
@@ -733,9 +711,10 @@ def configdetails(conffile):
 								if(conffile.find('lj.application_definitions.json.txt')!=-1):
 									definedapps(conffile)
 								else:
-								    if(conffile.find('system.meminfo.txt')!=-1 or conffile.find('system.num_cpu_cores.txt')!=-1):
+								    if(conffile.find('system_details.txt')!=-1):
 									resourceinfo(conffile)
-	return
+
+
                     
 ##Function to search for all Errors and Warnings in log files
 def errorsandwarns(logfile):
@@ -808,10 +787,6 @@ def weblinks(path,filename,errorandwarn):
 def main():
     global filename
     global errorandwarn    
-    global cores
-    global totalmem
-
-    cleanup()
     
     print('Enter the full path to AS bundle zip file :')
     path = raw_input()
@@ -826,6 +801,8 @@ def main():
     filename = str(casenum)+'_'+'analysisserverdetails.txt'
     errorandwarn = str(casenum)+'_'+'errorsandwarns.txt'
 
+##    createdir(path)
+    cleanup(path)
     unzip(path)
     conn, c = dbconnect(path)
 
@@ -847,7 +824,9 @@ def main():
         dbclose(conn)
 
     navigatefolders()
-    movefiles(path)
-    cleanup()
+##    movefiles(path)
+##    cleanup()
     weblinks(path,filename,errorandwarn)
+    end = time.time()
+    print('Took '+str(end-start)+'s'+' for the script to finish.... ')
 main()
