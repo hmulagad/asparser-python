@@ -33,8 +33,9 @@
 ## 04/30/17 - Added logic to get the silo settings from the lj.silosettings file
 ## 05/07/17 - Added logic to generate the WEBLINKS for the output files
 ## 05/08/17 - Added logic to get the count of transaction type defined
-## 05/15/17 - Logic to extract contents of the zip in place and creating output files as needed
+## 05/15/18 - Logic to extract contents of the zip in place and creating output files as needed
 ##            create directory function exists to implement unzipping to newly created folder, for future changes
+## 06/25/18 - Logic to catch several silo and ferryman bugs and important errors.
 #############################################################################################################
 
 #############################################################################################################
@@ -300,7 +301,21 @@ def navigatefolders():
                         errorsandwarns(logfile)
                         if ((logfile.find('silo_dispatch-performance.log')!=-1) or (logfile.find('silo_dispatch.log')!=-1)):
                             silostatus(logfile)
-                            
+			elif(logfile.find('silo_dispatch-0.stderr.log')!=-1):
+			    bug299149(logfile)
+			    sid(logfile)
+			    invalidstrtime(logfile)
+			    emxtraceparse(logfile)
+			elif(logfile.find('silo_stitcher.log')!=-1):
+				stitcherhash(logfile)
+			elif(logfile.find('wsproxy2.log')!=-1):
+				agentreconnect(logfile)
+			elif(logfile.find('ferryman3.log')!=-1):
+				offset(logfile)
+			elif(logfile.find('odb_server-0.stderr')!=-1):
+				sharedmem(logfile)
+			elif(logfile.find('ERROR: file_size')!=-1):
+				filesize(logfile)
                             
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
@@ -319,6 +334,243 @@ def navigatefolders():
 
     for conffile in configfiles:
         configdetails(conffile)
+
+##Function to find if we are running into BUG 299149
+def bug299149(logfile):
+        srchstrng = ['points to itself as x-thread parent']
+        x = 0
+
+        try:
+                fobj = openfile(logfile)
+                fwrite = open(filename,'a')
+
+                for line in fobj:
+                        for strng in srchstrng:
+                                if((strng in line) and ('ERROR' in line)):
+                                        x+=1
+                if x>=5:
+                        fwrite.write('\n***** Bug 299149 ******\n')
+                        fwrite.write('APPTX points to itself as x-thread parent (possibly related to bug 299149)- '+str(x)+' times\n')
+			fwrite.write('Please check silo_dispatch-0.stderr.log for details...\n')
+
+        except Exception as e:
+                print(e)
+
+        fwrite.close()
+        fobj.close()
+
+##Function to find string with sid 0
+def sid(logfile):
+	srchstrng = ['unable to find string with sid=[0]']
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			for strng in srchstrng:
+				if((strng in line) and ('ERROR' in line)):
+					x+=1
+
+		if x>0:
+			fwrite.write('\n***** Silo:unable to find string with sid ******\n')
+			fwrite.write('unable to find string with sid=[0]- '+str(x)+' times\n')
+			fwrite.write('Please check silo_dispatch-0.stderr.log for details...\n')
+
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+
+##Function to find invalid start_time
+def invalidstrtime(logfile):
+	srchstrng = 'invalid query; msg=[invalid start time;'
+	srchstrng1 = 'Start stack is unexpectedly empty'
+	x = 0
+	y = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if 'ERROR:' in line:
+				if(srchstrng in line):
+					x+=1
+				elif(srchstrng1 in line):
+					y+=1
+
+		if x>0:
+			fwrite.write('\n***** Silo_query:invalid start_time; does not match granularity ******\n')
+			fwrite.write('Invalid start time - '+str(x)+' times\n')
+			fwrite.write('Please check silo_dispatch-0.stderr.log for details...\n')
+		if y>0:
+			fwrite.write('\n***** Silo_store:Tracefile parsing failing *****\n')
+			fwrite.write('Exception detected when parsing files because of empty start stacks- '+str(y)+' times\n')
+
+
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+
+##Function to get the particle hash collision errors in stitcher log
+def stitcherhash(logfile):
+	srchstrng = ['DIAG: Particle hash collision x-thread-self:']
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			for strng in srchstrng:
+				if(strng in line):
+					x+=1
+		if x>0:
+			fwrite.write('\n***** Particle Hash Collisions ******\n')
+			fwrite.write('particle hash collision (could indicate transactions are not stitching properly)(possibly related to bug 299068) - '+str(x)+' times\n')
+			fwrite.write('Please check silo_stitcher.log for details...\n')
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##Function to check active agents reconnecting
+def agentreconnect(logfile):
+	srchstrng = 'connected but request matches active iid; stopping internal proxy'
+	srchstrng1 = 'ERROR: empty/invalid dsaInfo encountered for uid'
+	
+	x = 0
+	y = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if(srchstrng in line):
+				x+=1
+			elif(srchstrng1 in line):
+				y+=1
+
+		if x>0:
+			fwrite.write('\n***** Agents reconnecting with Active IID ******\n')
+			fwrite.write('Active Agents reconnecting with active iid;(i.e. agent already exists; IP may be different)- '+str(x)+' times\n')
+			fwrite.write('DSA is trying to connect but appears to be already connected \n')
+			fwrite.write('Please check wsproxy2.log for details...\n')
+
+		if y>0:
+			fwrite.write('\n***** Empty response from dsainfo ******\n')
+			fwrite.write('Empty or Invalid dsainfo response from agent (should investigate)- '+str(y)+' times\n')
+			fwrite.write('Please check wsproxy2.log for details...\n')
+
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##Function to check if data download error because of high offset
+def offset(logfile):
+	srchstrng = 'ERROR: Offset for data too high when requesting file'
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if(srchstrng in line):
+				x+=1
+
+		if x>0:
+			fwrite.write('\n****** Ferryman unable to download data *****\n')
+			fwrite.write('Offset for data too high when requesting file- '+str(x)+' times \n')
+			fwrite.write('Please check ferryman3.log for details...\n')
+
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##Function to check if ODB is running into shared memory errors
+def sharedmem(logfile):
+	srchstrng = 'ERROR: Unable to allocate shared memory block of'
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+		
+		for line in fobj:
+			if(srchstrng in line):
+				x+=1
+
+		if x>0:
+			fwrite.write('\n*****Unable to start ODB shared memory issues *****\n')
+			fwrite.write('Unable to allocate shared memory block of- '+str(x)+' times \n')
+			fwrite.write('Please check odb_server-0.stderr for details...\n')
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##Function to check if there are issues with EMX trace parsing
+def emxtraceparse(logfile):
+	srchstrng = 'ERROR: Exception parsing emx trace'
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if (srchstrng in line):
+				x+=1
+
+		if x>0:
+			fwrite.write('\n***** silo_emx_store: Issues parsing environmental metrics ******\n')
+			fwrite.write('Error parsing environmental metrics file - '+str(x)+' times \n')
+			fwrite.write('Possible corrupt files? Please check silo_dispatch-0.stderr.log for details...\n')
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##Function to check bug 299625
+def fizesize(logfile):
+	srchstrng = 'ERROR: file_size'
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if (srchstrng in line):
+				x+=1
+
+		if x>5:
+			fwrite.write('\n*****silo_dispatch: File size failure *****\n')
+			fwrite.write('file_size failed - '+str(x)+' times \n')
+			fwrite.write('Possibly bug 299625. File sizes for [/var/lib/appinternals/silo/data/journal/*/*/*.pbm] files \n')
+			fwrite.write('Please take a look at silo_dispatch.log for details... \n')
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
 
 ##Function to get appinternals AS version
 def version(conffile):
