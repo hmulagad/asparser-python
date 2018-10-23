@@ -36,6 +36,9 @@
 ## 05/15/18 - Logic to extract contents of the zip in place and creating output files as needed
 ##            create directory function exists to implement unzipping to newly created folder, for future changes
 ## 06/25/18 - Logic to catch several silo and ferryman bugs and important errors.
+## 07/23/18 - Logic to catch JSON unmarshal error in wsproxy2.log
+## 10/11/18 - Logic to catch ODB client crash and sending corrupt data
+## 10/22/18 - Logic to get cluster nodes details
 #############################################################################################################
 
 #############################################################################################################
@@ -316,6 +319,8 @@ def navigatefolders():
 				sharedmem(logfile)
 			elif(logfile.find('ERROR: file_size')!=-1):
 				filesize(logfile)
+			elif(logfile.find('odb_server.log')!=-1):
+				odbclientcrash(logfile)
                             
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
@@ -334,6 +339,30 @@ def navigatefolders():
 
     for conffile in configfiles:
         configdetails(conffile)
+
+##Function to find if client crashed and sent corrupt data in odb server log
+def odbclientcrash(logfile):
+	srchstrng = ['Some data received from crashed client appears to be corrupt & has not been written']
+	x = 0
+	
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			for strng in srchstrng:
+				if ((strng in line) and ('ERROR in line')):
+					x+=1
+		
+		if x>0:
+			fwrite.write('\n*****ODB Server:client crash *****\n')
+			fwrite.write('Client crashed and sent corrupt data'+' occurred- '+str(x)+' times\n')
+			fwrite.write('Please check odb_server.log for details...\n')
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
 
 ##Function to find if we are running into BUG 299149
 def bug299149(logfile):
@@ -375,7 +404,7 @@ def sid(logfile):
 
 		if x>0:
 			fwrite.write('\n***** Silo:unable to find string with sid ******\n')
-			fwrite.write('unable to find string with sid=[0]- '+str(x)+' times\n')
+			fwrite.write('unable to find string with sid=[0] occurred- '+str(x)+' times\n')
 			fwrite.write('Please check silo_dispatch-0.stderr.log for details...\n')
 
 	except Exception as e:
@@ -410,6 +439,7 @@ def invalidstrtime(logfile):
 		if y>0:
 			fwrite.write('\n***** Silo_store:Tracefile parsing failing *****\n')
 			fwrite.write('Exception detected when parsing files because of empty start stacks- '+str(y)+' times\n')
+			fwrite.write('Please check silo_dispatch-0.stderr.log for details...\n')
 
 
 	except Exception as e:
@@ -446,9 +476,11 @@ def stitcherhash(logfile):
 def agentreconnect(logfile):
 	srchstrng = 'connected but request matches active iid; stopping internal proxy'
 	srchstrng1 = 'ERROR: empty/invalid dsaInfo encountered for uid'
-	
+	srchstrng2 = 'json: can''t unmarshal; error='
+		
 	x = 0
 	y = 0
+	z = 0
 
 	try:
 		fobj = openfile(logfile)
@@ -459,23 +491,32 @@ def agentreconnect(logfile):
 				x+=1
 			elif(srchstrng1 in line):
 				y+=1
+			elif(srchstrng2 in line):
+				z+=1
 
 		if x>0:
 			fwrite.write('\n***** Agents reconnecting with Active IID ******\n')
-			fwrite.write('Active Agents reconnecting with active iid;(i.e. agent already exists; IP may be different)- '+str(x)+' times\n')
+			fwrite.write('Active Agents reconnecting with active iid;(i.e. agent already exists; IP may be different)- '+str(x)+' time(s)\n')
 			fwrite.write('DSA is trying to connect but appears to be already connected \n')
 			fwrite.write('Please check wsproxy2.log for details...\n')
 
 		if y>0:
 			fwrite.write('\n***** Empty response from dsainfo ******\n')
-			fwrite.write('Empty or Invalid dsainfo response from agent (should investigate)- '+str(y)+' times\n')
+			fwrite.write('Empty or Invalid dsainfo response from agent (should investigate)- '+str(y)+' time(s)\n')
 			fwrite.write('Please check wsproxy2.log for details...\n')
+		
+		if z>0:
+			fwrite.write('\n*****wsproxy2:Unable to parse json *****\n')
+			fwrite.write('JSON can not unmarshal error occurred '+str(z)+' time(s)\n')
+			fwrite.write('Typically agent response is an error in html format. These might be noisy messages though.\n')
+			fwrite.write('Please check wsproxy2.log for details... \n')
 
 	except Exception as e:
 		print(e)
 
 	fwrite.close()
 	fobj.close()
+
 
 ##Function to check if data download error because of high offset
 def offset(logfile):
@@ -492,7 +533,7 @@ def offset(logfile):
 
 		if x>0:
 			fwrite.write('\n****** Ferryman unable to download data *****\n')
-			fwrite.write('Offset for data too high when requesting file- '+str(x)+' times \n')
+			fwrite.write('Offset for data too high when requesting file- '+str(x)+' time(s) \n')
 			fwrite.write('Please check ferryman3.log for details...\n')
 
 	except Exception as e:
@@ -516,7 +557,7 @@ def sharedmem(logfile):
 
 		if x>0:
 			fwrite.write('\n*****Unable to start ODB shared memory issues *****\n')
-			fwrite.write('Unable to allocate shared memory block of- '+str(x)+' times \n')
+			fwrite.write('Unable to allocate shared memory block of- '+str(x)+' time(s) \n')
 			fwrite.write('Please check odb_server-0.stderr for details...\n')
 	except Exception as e:
 		print(e)
@@ -539,7 +580,7 @@ def emxtraceparse(logfile):
 
 		if x>0:
 			fwrite.write('\n***** silo_emx_store: Issues parsing environmental metrics ******\n')
-			fwrite.write('Error parsing environmental metrics file - '+str(x)+' times \n')
+			fwrite.write('Error parsing environmental metrics file - '+str(x)+' time(s) \n')
 			fwrite.write('Possible corrupt files? Please check silo_dispatch-0.stderr.log for details...\n')
 	except Exception as e:
 		print(e)
@@ -562,7 +603,7 @@ def fizesize(logfile):
 
 		if x>5:
 			fwrite.write('\n*****silo_dispatch: File size failure *****\n')
-			fwrite.write('file_size failed - '+str(x)+' times \n')
+			fwrite.write('file_size failed - '+str(x)+' time(s) \n')
 			fwrite.write('Possibly bug 299625. File sizes for [/var/lib/appinternals/silo/data/journal/*/*/*.pbm] files \n')
 			fwrite.write('Please take a look at silo_dispatch.log for details... \n')
 	except Exception as e:
@@ -830,7 +871,7 @@ def silostatus(logfile):
 
         fwrite.write('\n****** Latest purge details ***** \n')
         for x in purge_details:
-            if ((x.find('DIAG:')!=-1) or x.find('Retired')!=-1):
+            if ((x.find('DIAG: Will try to retire')!=-1) or x.find('Retired')!=-1):
                 fwrite.write(x)
 
     fwrite.close()
@@ -911,7 +952,32 @@ def definedapps(logfile):
 
 	except Exception as e:
 		print(e)
-    
+
+
+##Function to get cluster node information
+def clusterinfo(logfile):
+	try:
+		config = json.load(open(logfile))
+		cluster_role = ''
+		cluster_node = ''
+
+		fwrite = open(filename,'a')
+		fwrite.write('\n*****Cluster Information *****\n')
+
+		for n in config['items']:
+			if n['cluster_role']!='':
+				cluster_role = n['cluster_role']
+			if n['name']!='':
+				cluster_node = n['name']
+
+			##print(cluster_role,cluster_node)
+			fwrite.write(str(cluster_role)+':	'+str(cluster_node)+'\n')
+		
+		fwrite.close()
+		return
+
+	except Exception as e:
+		print(e)
 ##Function to get configuration and other system details
 def configdetails(conffile):
 
@@ -965,6 +1031,9 @@ def configdetails(conffile):
 								else:
 								    if(conffile.find('system_details.txt')!=-1):
 									resourceinfo(conffile)
+								    else:
+									if (conffile.find('lj.cluster.cluster_nodes.json.txt')!=-1):
+										clusterinfo(conffile)
 
 
                     
