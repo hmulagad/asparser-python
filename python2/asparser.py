@@ -39,6 +39,7 @@
 ## 07/23/18 - Logic to catch JSON unmarshal error in wsproxy2.log
 ## 10/11/18 - Logic to catch ODB client crash and sending corrupt data
 ## 10/22/18 - Logic to get cluster nodes details
+## 11/12/18 - Upload bundle to logalyzer using Andrew's script
 #############################################################################################################
 
 #############################################################################################################
@@ -55,6 +56,7 @@ import zipfile
 import shutil
 import json
 import time
+import logalyzer_feeder_direct
 
 start = time.time()
 
@@ -1103,6 +1105,20 @@ def weblinks(path,filename,errorandwarn):
 
 	print('\n*****************************\n')
 
+##Function to upload bundle to logalyzer
+def logalyzer_upload(email,title,customer,file_name):
+	try:
+		print('Uploading bundle to logalyzer... ')
+
+		options = logalyzer_feeder_direct.LogalyzerOptions(email)
+		options.eat_exception = True
+		feeder = logalyzer_feeder_direct.Logalyzer(options)
+		response, error = feeder.go(title,customer,file_name,'AIX')
+		
+		print error
+
+	except Exception as e:
+		print e
     
 ##Main function
 def main():
@@ -1121,6 +1137,11 @@ def main():
 
     filename = str(casenum)+'_'+'analysisserverdetails.txt'
     errorandwarn = str(casenum)+'_'+'errorsandwarns.txt'
+
+    email = str(casenum)+'@riverbedsupport.com'
+    title = 'AIX_logs_'+str(casenum)
+    customer = 'Global Support'
+    file_name = os.path.abspath(path)
 
 ##    createdir(path)
     cleanup(path)
@@ -1148,6 +1169,7 @@ def main():
 ##    movefiles(path)
 ##    cleanup()
     weblinks(path,filename,errorandwarn)
+    logalyzer_upload(email,title,customer,file_name)
     end = time.time()
     print('Took '+str(end-start)+'s'+' for the script to finish.... ')
 main()
