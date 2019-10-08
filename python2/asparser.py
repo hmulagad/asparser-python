@@ -1,53 +1,8 @@
-#############################################################################################################
+#############################################
 ## Author: Harikishan Mulagada
 ## Role  : Staff Engineer SteelCentral
 ##
-## 03/23/17 - Added agent count grouped by version,
-##            Changed processcountlist function to count(id) from count(*)
-##            Changed processcountlist function to use correct wording as process count and not agent count
-##            Added SEVERE in the list of search strings
-##
-## 03/25/17 - Added latest core files to be written to details output file along with total count of core files
-##
-## 03/28/17 - Python 2.x does support 'encoding' option for 'open(file, encoding='utf8')'. Removed encoding
-##            Find a way to open trace file with out encoding error
-##
-## 03/31/17 - Added silostatus function to check if status of stitcher/aggregator input buffer is keeping up
-##            or lagging. Anything which has GiB should be an issue. Few hundred MB should be fine
-##            Added 'HTTPError' as on of the search words
-##
-## 04/03/17 - Added section to write latest purge details from silo_dispatch.log
-##
-## 04/14/17 - Added case number to be entered which is appended to output files
-##            Cleaning up unzipped folder
-##            Moving output files to location of the dump file
-##            If the file exists remove the existing file and move the new file
-## 04/14/17 - Ran into 'UnicodeDecodeError' while reading a file from AR11 sysdump
-##            Added try catch block to catch the exception and skip the file which have different encoding
-## 05/19/17 - Added check for case number. If entered case number is not numeric do not proceed until
-##            until valid numeric value is enetered
-## 06/20/17 - isnumeric is not recognized function in Python 2. Changed it to isdigit
-## 07/23/17 - Errors in upgrade.log now in errorandwarns file.
-## 08/01/17 - Added logic to check JOURNAL_DIR_STX_STORE_IN buffer to see if processing of data is lagging
-## 08/27/17 - Added logic to get the appliance type from the ljsystem file
-## 04/30/17 - Added logic to get the silo settings from the lj.silosettings file
-## 05/07/17 - Added logic to generate the WEBLINKS for the output files
-## 05/08/17 - Added logic to get the count of transaction type defined
-## 05/15/18 - Logic to extract contents of the zip in place and creating output files as needed
-##            create directory function exists to implement unzipping to newly created folder, for future changes
-## 06/25/18 - Logic to catch several silo and ferryman bugs and important errors.
-## 07/23/18 - Logic to catch JSON unmarshal error in wsproxy2.log
-## 10/11/18 - Logic to catch ODB client crash and sending corrupt data
-## 10/22/18 - Logic to get cluster nodes details
-## 11/12/18 - Upload bundle to logalyzer using Andrew's script
-#############################################################################################################
-
-#############################################################################################################
-                                    ##########TO DO##########
-
-## ENH-1 - If the error/warning is repeating, write the error/warn once and count on how many time it occurred in that day
-
-#############################################################################################################
+##############################################
 
 import os
 import re
@@ -56,6 +11,7 @@ import zipfile
 import shutil
 import json
 import time
+import sys
 import logalyzer_feeder_direct
 
 start = time.time()
@@ -75,7 +31,7 @@ def createdir(filepath):
 	return workdir
 
 ##Delete all previously extracted folders
-def cleanup(filepath):
+def cleanup(filepath,filename,errorandwarn):
 
     os.chdir(os.path.dirname(os.path.abspath(filepath)))
     extrctdir = os.path.basename(filepath).split('.zip')[0]
@@ -91,7 +47,7 @@ def cleanup(filepath):
 
 
     for fname in os.listdir(cwd):
-        if fname.endswith('.txt'):
+        if (fname.endswith('.txt') and (fname.find(filename)!=-1 or fname.find(errorandwarn)!=-1)):
             os.remove(fname)            
 
 ##Unzip the diag bundle zip file
@@ -284,6 +240,7 @@ def navigatefolders():
     cwd = os.getcwd()
     filelist = []
     configfiles = []
+    gnrlfiles = []
     folderstoread = ['appinternals','nginx']
     folderstoread_config = ['commands']
     
@@ -296,7 +253,13 @@ def navigatefolders():
                     else:
                         if ((x.endswith('.log') or x.endswith('.out'))):
                             filelist.append(os.path.join(os.path.abspath(path),x))
+			elif(x.find('messages')!=-1):
+				gnrlfiles.append(os.path.join(os.path.abspath(path),x))
+				
     try:
+
+    	for conffile in configfiles:
+        	configdetails(conffile)
 
         for logfile in filelist:
             for foldername in folderstoread:
@@ -306,11 +269,17 @@ def navigatefolders():
                         errorsandwarns(logfile)
                         if ((logfile.find('silo_dispatch-performance.log')!=-1) or (logfile.find('silo_dispatch.log')!=-1)):
                             silostatus(logfile)
+			elif(logfile.find('silo_dispatch-retire.log')!=-1):
+				 silostatus(logfile)
+			elif(logfile.find('silo_dispatch-calibration.log')!=-1):
+				siloperf(logfile)
 			elif(logfile.find('silo_dispatch-0.stderr.log')!=-1):
 			    bug299149(logfile)
 			    sid(logfile)
 			    invalidstrtime(logfile)
 			    emxtraceparse(logfile)
+			elif(logfile.find('silo_apptx_store.log')!=-1):
+				callsperseg(logfile)
 			elif(logfile.find('silo_stitcher.log')!=-1):
 				stitcherhash(logfile)
 			elif(logfile.find('wsproxy2.log')!=-1):
@@ -319,28 +288,165 @@ def navigatefolders():
 				offset(logfile)
 			elif(logfile.find('odb_server-0.stderr')!=-1):
 				sharedmem(logfile)
+				odbmemalloc(logfile)
 			elif(logfile.find('ERROR: file_size')!=-1):
 				filesize(logfile)
 			elif(logfile.find('odb_server.log')!=-1):
 				odbclientcrash(logfile)
+			elif(logfile.find('silo_aggr.metrics_')!=-1):
+				siloaggr_deadlock(logfile)
+			elif(logfile.find('appinternals-webui.log')!=-1):
+				webuih2db(logfile)
+			elif(logfile.find('sensor-0.stderr.log')!=-1):
+				nospace(logfile)
+
+	for logfile in gnrlfiles:
+		if (logfile.find('messages')!=-1):
+			OOM_killer(logfile)
+			segfault(logfile)
                             
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
 
-##    try:    
-##
-##        print('\n***************CONFIG FILE LIST*****************\n')
-##
-##        for conffile in configfiles:
-##            for fdrname in folderstoread_config:
-##                if fdrname in conffile:
-##                    print(conffile)
-##
-##    except FileNotFoundError:
-##        print(conffile,'File does not exist...\n')
 
-    for conffile in configfiles:
-        configdetails(conffile)
+##Function to catch 1M default limit of calls per segement in txns
+def callsperseg(logfile):
+	try:
+		cnt = 0
+		lkup_str = ['hit configured limit of 1,000,000']
+
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for x in range(0,len(lkup_str)):
+			for line in fobj:
+				if lkup_str[x] in line:
+					cnt+=1
+
+		if cnt>0:
+			fwrite.write('\n***** Calls hitting configured limit *****\n')
+			fwrite.write('Number of calls in transaction hit configured limit of 1M occurred {0} times\n'.format(cnt))
+			fwrite.write('Check/Analyzer silo_apptx_stire.log for possible nocollects \n')
+			fwrite.write('Also a good idea to decrease the "calls_per_seg" from 1M to 100K...\n')
+
+	except Exception as e:
+		print(e)
+
+
+##Function to catch no space issue in sensor log
+def nospace(logfile):
+	try:
+		cnt = 0
+		lkup = ['IOError: [Errno 28] No space left on device']
+
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			for key in lkup:
+				if key.strip() in line:
+					cnt+=1
+
+		if cnt>0:
+			fwrite.write('\n***** Possible Space issue *****\n')
+			fwrite.write('No Space left on device message occurred {0} time(s)\n'.format(cnt))
+			fwrite.write('Check if root partition or any other partition is low on space...\n')
+
+		fobj.close()
+		fwrite.close()
+
+	except Exception as e:
+		print(e)
+	
+
+
+##Function to catch bug#299268
+def webuih2db(logfile):
+	cnt = 0
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if(('WARN' in line) and ('Could not obtain connection metadata : IO Exception:' in line)):
+				cnt+=1
+		if cnt>0:
+			fwrite.write('\n***** Bug 299268 *****\n')
+			fwrite.write('Could not obtain connection metadata : IO Exception occurred {0} time(s)\n'.format(cnt))
+			fwrite.write('To fix the issue please do the following:\n1) Log into AS as root\n2) Delete /var/lib/appinternals-webui/webui_data\n3) Restart webUI\n\n')
+			fwrite.write('For more details please take a look at Bug#299268 - https://bugzilla.nbttech.com/show_bug.cgi?id=299268\n')
+
+	except Exception as e:
+		print(e)
+
+	fobj.close()
+	fwrite.close()
+
+##Function to catch deadlocks in silo aggr
+def siloaggr_deadlock(logfile):
+	cnt = 0
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if(('ERROR' in line) and ('potential deadlock' in line)):
+				cnt+=1
+                if cnt>0:
+                        fwrite.write('\n***** Silo Aggregator Deadlocks *****\n')
+                        fwrite.write('Unexpected deadlock encountered {0} times\n'.format(cnt))
+                        fwrite.write('Please check {0} log for details...\n'.format(logfile))
+
+	except Exception as e:
+		print(e)
+
+        fobj.close()
+        fwrite.close()
+
+##Function to catch segfaults in messages log
+def segfault(logfile):
+	cnt = 0
+	try:
+		fobj = openfile(logfile)
+                fwrite = open(filename,'a')
+
+                for line in fobj:
+                        if (('segfault at' in line) and 'error' in line):
+                                cnt+=1
+
+                if cnt>0:
+                        fwrite.write('\n***** Segmentation faults *****\n')
+                        fwrite.write('Process termination via segfault occurred {0} times\n'.format(cnt))
+                        fwrite.write('Please check /var/log/messages for details...\n')
+
+
+	except Exception as e:
+		print(e)
+
+        fobj.close()
+        fwrite.close()
+
+##Function to catch the OOM killer in messages log
+def OOM_killer(logfile):
+	cnt = 0
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if (line.find('Out of memory: Kill process')!=-1):
+				cnt+=1
+
+		if cnt>0:
+			fwrite.write('\n***** OOM Killer invoked *****\n')
+			fwrite.write('out of memory killer / OOM killer activated (picks process to kill when system runs out of memory) {0} times\n'.format(cnt))
+			fwrite.write('Please check /var/log/messages for details...\n')
+
+	except Exception as e:
+		print(e)
+
+        fobj.close()
+        fwrite.close()
 
 ##Function to find if client crashed and sent corrupt data in odb server log
 def odbclientcrash(logfile):
@@ -357,7 +463,7 @@ def odbclientcrash(logfile):
 					x+=1
 		
 		if x>0:
-			fwrite.write('\n*****ODB Server:client crash *****\n')
+			fwrite.write('\n***** ODB Server:client crash *****\n')
 			fwrite.write('Client crashed and sent corrupt data'+' occurred- '+str(x)+' times\n')
 			fwrite.write('Please check odb_server.log for details...\n')
 	except Exception as e:
@@ -538,6 +644,29 @@ def offset(logfile):
 			fwrite.write('Offset for data too high when requesting file- '+str(x)+' time(s) \n')
 			fwrite.write('Please check ferryman3.log for details...\n')
 
+	except Exception as e:
+		print(e)
+
+	fwrite.close()
+	fobj.close()
+
+##function to check if ODB (DB node) in cluster is overloaded
+def odbmemalloc(logfile):
+	srchstrng = 'ERROR: Memory allocation of'
+	x = 0
+
+	try:
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if(srchstrng in line) and ('failed' in line):
+				x+=1
+
+		if x>0:
+			fwrite.write('\n****** Memory allocation failed for ODB *****\n')
+			fwrite.write('Memory allocation failed occurred {0} time(s)\n'.format(x))
+			fwrite.write('Please check odb_server-0.stderr for details...\n')
 	except Exception as e:
 		print(e)
 
@@ -836,6 +965,44 @@ def appliancetype(conffile):
             else:
                 print('The file is empty... ',conffile)
 
+def siloperf(logfile):
+	try:
+		lookuplist = ['APP:','BMX:','EMX:','STITCHER:','STX:','UTX:','MAP:']
+
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		lines = fobj.readlines()
+		perf_details = lines[-12:]
+
+		fwrite.write('\n***** Silo Calibration Details *****\n')
+		fwrite.write('(Cores for incoming or backlog should not be more than available cores) \n')
+		
+		for x in perf_details:
+			if (x.find('====')==-1):
+				##fwrite.write(x.strip()+'\n')
+				if(x.find('TOTAL:')!=-1 and x.find('RT_CORES:')!=-1 and x.find('PREF_CORES:')!=-1):
+					tmp = x.split(',')
+					##print(str(tmp[0]).strip())
+					##print(str(tmp[0].split('TOTAL:')[1]).strip())
+					##print(str(str(tmp[1]).split('[')[0]).strip())
+					##print(str(tmp[0].split('TOTAL:')[1]).strip().replace('RT_CORES','Cores needed for incoming data'))
+					##print(str(str(tmp[1]).split('[')[0]).strip().replace('PREF_CORES','Cores needed for backlog data'))
+					##print(str(str(str(tmp[1]).split('[')[1].split(']')[0]).split(' ')[0]).strip())
+					fwrite.write('\n'+str(tmp[0].split('TOTAL:')[1]).strip().replace('RT_CORES','Cores needed for incoming data')+'\n')
+					fwrite.write(str(str(tmp[1]).split('[')[0]).strip().replace('PREF_CORES','Cores needed for backlog data')+'\n')
+					fwrite.write('Cores available: '+str(str(str(tmp[1]).split('[')[1].split(']')[0]).split(' ')[0]).strip()+'\n \n')
+
+				for lkup in lookuplist:
+					if (x.find(lkup)!=-1 and (x.find('RT_CORES')==-1 or x.find('PREF_CORES')==-1)):
+						fwrite.write(x.strip()+'\n')
+
+		fobj.close()
+		fwrite.close()
+
+	except Exception as e:
+		print(e)
+
 ##Function to get latest status of silo statistics
 def silostatus(logfile):
     silostats = {}
@@ -847,7 +1014,7 @@ def silostatus(logfile):
         fwrite.write('\n****** Stitcher/Aggregator input buffer ***** \n')
 
         for line in fobj:
-            if(line.find('JOURNAL_DIR_STITCHER_IN')!=-1 or line.find('JOURNAL_DIR_STX_STORE_IN')!=-1):
+            if(line.find('JOURNAL_DIR_STITCHER')!=-1 or line.find('JOURNAL_DIR_STX_STORE')!=-1):
                 x = line.split(':')
                 silostats.update({x[0]:x[1]})
             else:
@@ -861,20 +1028,26 @@ def silostatus(logfile):
                         
         for key,value in silostats.items():
             if key.find('JOURNAL')!=-1:
-                if value.find('GiB') != -1:
+                if (value.find('GiB')!= -1 or value.find('TiB')!= -1):
                     fwrite.write('Might be lagging in processing data..'+key+'-'+value)
                 else:
                     fwrite.write('(OK) '+key+'-'+value)
             else:
                 fwrite.write('Number of Records: '+value)
     else:
+	tmp = []
         lines = fobj.readlines()
         purge_details=lines[-15:]
 
-        fwrite.write('\n****** Latest purge details ***** \n')
         for x in purge_details:
             if ((x.find('DIAG: Will try to retire')!=-1) or x.find('Retired')!=-1):
-                fwrite.write(x)
+                ##fwrite.write(x)
+		tmp.append(x)
+
+	if len(tmp)!=0:
+		fwrite.write('\n****** Latest purge details ***** \n')
+		for n in tmp:
+			fwrite.write(n)
 
     fwrite.close()
     fobj.close()
@@ -904,7 +1077,7 @@ def resourceinfo(logfile):
 		fobj = openfile(logfile)
 		fwrite = open(filename,'a')
 
-		fwrite.write('\n*****Resource Details *****\n')
+		fwrite.write('\n***** Resource Details *****\n')
 
 		for line in fobj:
 			if ((line.find('MemTotal:')!=-1 or line.find('MemFree:')!=-1 or line.find('system.cpu cores :')!=-1 or line.find('system.num_processors:')!=-1)and line.find('#')==-1):
@@ -998,11 +1171,13 @@ def configdetails(conffile):
                     if(conffile.find('processes_sorted_by_resident_size.txt')!=-1):
                         procbymem(conffile)
                     else:
-                        if(conffile.find('corrupt_app_traces.txt')!=-1 and conffile.find('num')==-1):
-                            crptapptraces(conffile)
+                        if(conffile.find('corrupt_app_traces.txt')!=-1 and conffile.find('num')==-1):	
+		            print('Skipping writing the list...')
+                            ##crptapptraces(conffile)
                         else:
                             if(conffile.find('corrupt_emx_traces.txt')!=-1 and conffile.find('num')==-1):
-                                crptemxtraces(conffile)
+				print('Skipping writing the list...')
+                                ##crptemxtraces(conffile)
                             else:
                                 if(conffile.find('corrupt_odb_files.txt')!=-1 and conffile.find('num')==-1):
                                     crptodbfiles(conffile)
@@ -1119,34 +1294,81 @@ def logalyzer_upload(email,title,customer,file_name):
 
 	except Exception as e:
 		print e
-    
+ 
+##Function to set details when we have 4 arguments
+def setdetails4(argv):
+        try:
+                if argv[1].isdigit():
+                        if argv[2]!='':
+                                path = argv[0]
+                                casenum = argv[1]
+                                errorandwarn = str(casenum)+'_'+str(argv[2])+'_errorsandwarns.txt'
+                                filename = str(casenum)+'_'+str(argv[2])+'_systemdetails.txt'
+                                title = str('AIX_logs_'+str(casenum)+'_'+str(argv[2])).rstrip()
+                        else:
+                                path = argv[0]
+                                casenum = argv[1]
+                                errorandwarn = str(casenum)+'_errorsandwarns.txt'
+                                filename = str(casenum)+'_systemdetails.txt'
+                                title = str('AIX_logs_'+str(casenum)).rstrip()
+                else:
+                        print('\nCase number should be numeric only')
+                        print('Usage: python script_name path_to_diagbundle case_number <optional Desc>')
+                        exit()
+
+        except Exception as e:
+                print(e)
+
+        return path,casenum,filename,errorandwarn,title
+
+##Function to set details when we have 3 arguments
+def setdetails3(argv):
+        try:
+                if argv[1].isdigit():
+                        path = argv[0]
+                        casenum = argv[1]
+                        errorandwarn = str(casenum)+'_errorsandwarns.txt'
+                        filename = str(casenum)+'_systemdetails.txt'
+                        title = str('AIX_logs_'+str(casenum)).rstrip()
+                else:
+                        print('\nCase number should be numeric only')
+                        print('Usage: python script_name path_to_diagbundle case_number <optional Desc>')
+                        exit()
+
+        except Exception as e:
+                print(e)
+
+        return path,casenum,filename,errorandwarn,title
+   
 ##Main function
 def main():
     global filename
     global errorandwarn    
     
-    print('Enter the full path to AS bundle zip file :')
-    path = raw_input()
-
-    while True:
-        print('Enter valid case number :')
-        casenum = raw_input()
-
-        if casenum.isdigit():
-            break
-
-    filename = str(casenum)+'_'+'analysisserverdetails.txt'
-    errorandwarn = str(casenum)+'_'+'errorsandwarns.txt'
+    if len(sys.argv)==4:
+        try:
+                path,casenum,filename,errorandwarn,title = setdetails4(sys.argv[1:])
+        except Exception as e:
+                print(e)
+    elif len(sys.argv)==3:
+        try:
+                path,casenum,filename,errorandwarn,title = setdetails3(sys.argv[1:])
+        except Exception as e:
+                print(e)
+    else:
+        print('\nUsage: python script_name path_to_diagbundle case_number <optional Desc>')
+        exit()
 
     email = str(casenum)+'@riverbedsupport.com'
-    title = 'AIX_logs_'+str(casenum)
     customer = 'Global Support'
     file_name = os.path.abspath(path)
 
-##    createdir(path)
-    cleanup(path)
-    unzip(path)
-    conn, c = dbconnect(path)
+    try:
+    	cleanup(path,filename,errorandwarn)
+    	unzip(path)
+    	conn, c = dbconnect(path)
+    except Exception as e:
+	print(e)
 
     if ((conn != ' ') and (c !=' ')):
 
