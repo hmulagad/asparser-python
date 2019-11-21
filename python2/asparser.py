@@ -52,14 +52,26 @@ def cleanup(filepath,filename,errorandwarn):
 
 ##Unzip the diag bundle zip file
 def unzip(filepath):
+    filesizedict = {}
 
     print('Unzipping bundle..')
     
     zfile = zipfile.ZipFile(filepath)
     zfile.extractall()
+    
+    try:
+    	for file_name in zfile.namelist():
+		info = zfile.getinfo(file_name)
+		if (float(info.file_size)/1000000)>50.0:
+			filesizedict.update({info.filename:float(info.file_size)/1000000})
+    except Exception as e:
+    	print(e)
+   
     zfile.close()
 
     print('Finished unzipping the bundle...')
+
+    return(filesizedict)
 
 ##Use to open a file for any function
 def openfile(file):
@@ -280,6 +292,8 @@ def navigatefolders():
 			    emxtraceparse(logfile)
 			elif(logfile.find('silo_apptx_store.log')!=-1):
 				callsperseg(logfile)
+			elif(logfile.find('silo_query-queries.log')!=-1):
+				siloqueryissues(logfile)
 			elif(logfile.find('silo_stitcher.log')!=-1):
 				stitcherhash(logfile)
 			elif(logfile.find('wsproxy2.log')!=-1):
@@ -309,6 +323,34 @@ def navigatefolders():
         print(logfile,'File does not exist...\n')
 
 
+##Function to look into issues in silo_query-queries.log
+def siloqueryissues(logfile):
+	try:
+		cnt = 0
+		queries_done_min = []
+
+		fobj = openfile(logfile)
+		fwrite = open(filename,'a')
+
+		for line in fobj:
+			if (line.find('done in')!=-1):
+				match = re.findall('done in [0-9]+m? ',line)
+				##print(line,match)
+				queries_done_min.append(match)
+	
+		if (len(queries_done_min)>0):
+			fwrite.write('\n***** Silo queries taking long time ******\n')
+			fwrite.write('{0} queries took more than 60s to run\n'.format(len(queries_done_min)))
+			fwrite.write('Please take a look into silo_query-queries.log for more details on long running queries\n')
+
+
+		fobj.close()
+		fwrite.close()
+
+	except Exception as e:
+		print(e)
+
+	
 ##Function to catch 1M default limit of calls per segement in txns
 def callsperseg(logfile):
 	try:
@@ -326,8 +368,11 @@ def callsperseg(logfile):
 		if cnt>0:
 			fwrite.write('\n***** Calls hitting configured limit *****\n')
 			fwrite.write('Number of calls in transaction hit configured limit of 1M occurred {0} times\n'.format(cnt))
-			fwrite.write('Check/Analyzer silo_apptx_stire.log for possible nocollects \n')
+			fwrite.write('Check/Analyze silo_apptx_store.log for possible nocollects \n')
 			fwrite.write('Also a good idea to decrease the "calls_per_seg" from 1M to 100K...\n')
+
+		fobj.close()
+		fwrite.close()
 
 	except Exception as e:
 		print(e)
@@ -1391,7 +1436,7 @@ def main():
 ##    movefiles(path)
 ##    cleanup()
     weblinks(path,filename,errorandwarn)
-    logalyzer_upload(email,title,customer,file_name)
+##    logalyzer_upload(email,title,customer,file_name)
     end = time.time()
     print('Took '+str(end-start)+'s'+' for the script to finish.... ')
 main()
