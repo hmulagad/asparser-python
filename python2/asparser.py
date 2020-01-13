@@ -1018,13 +1018,13 @@ def siloperf(logfile):
 		fwrite = open(filename,'a')
 
 		lines = fobj.readlines()
-		perf_details = lines[-12:]
+		perf_details = lines[-13:]
 
 		fwrite.write('\n***** Silo Calibration Details *****\n')
 		fwrite.write('(Cores for incoming or backlog should not be more than available cores) \n')
 		
 		for x in perf_details:
-			if (x.find('====')==-1):
+			if (x.find('======')==-1):
 				##fwrite.write(x.strip()+'\n')
 				if(x.find('TOTAL:')!=-1 and x.find('RT_CORES:')!=-1 and x.find('PREF_CORES:')!=-1):
 					tmp = x.split(',')
