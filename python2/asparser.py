@@ -34,10 +34,11 @@ def createdir(filepath):
 def cleanup(filepath,filename,errorandwarn):
 
     os.chdir(os.path.dirname(os.path.abspath(filepath)))
+
     extrctdir = os.path.basename(filepath).split('.zip')[0]
     folderstodelete = ['appserver_logs','commands','cores','files',extrctdir]
     cwd = os.getcwd()
-##    cwd = os.chdir(os.path.dirname(os.path.abspath(filepath)))
+
     print('Deleting folders...')
     
     for fdname in os.listdir(cwd):
@@ -53,12 +54,16 @@ def cleanup(filepath,filename,errorandwarn):
 ##Unzip the diag bundle zip file
 def unzip(filepath):
     filesizedict = {}
+      
+    tmp_dir = createdir(filepath)
 
     print('Unzipping bundle..')
     
     zfile = zipfile.ZipFile(filepath)
-    zfile.extractall()
-    
+    zfile.extractall(tmp_dir)
+   
+    os.chdir(os.path.abspath(tmp_dir))
+ 
     try:
     	for file_name in zfile.namelist():
 		info = zfile.getinfo(file_name)
@@ -71,7 +76,7 @@ def unzip(filepath):
 
     print('Finished unzipping the bundle...')
 
-    return(filesizedict)
+    return(tmp_dir)
 
 ##Use to open a file for any function
 def openfile(file):
@@ -281,6 +286,7 @@ def navigatefolders():
                         errorsandwarns(logfile)
                         if ((logfile.find('silo_dispatch-performance.log')!=-1) or (logfile.find('silo_dispatch.log')!=-1)):
                             silostatus(logfile)
+                            silodiskusage(logfile)
 			elif(logfile.find('silo_dispatch-retire.log')!=-1):
 				 silostatus(logfile)
 			elif(logfile.find('silo_dispatch-calibration.log')!=-1):
@@ -987,28 +993,39 @@ def cores(conffile):
 ##Function to get the appliance type
 def appliancetype(conffile):
 
-    fobj = openfile(conffile)
+	try:
+	        lre = ''
+		fobj = openfile(conffile)
+		fwrite = open(filename,'a')
+		fwrite.write('\n***** Appliance type *****\n')
 
-    fwrite = open(filename,'a')
-    fwrite.write('\n***** Appliance type *****\n')
+		for i in fobj:
+			if(i.find('"install_type":')!=-1):
+            			x = i[i.index(':'):]
+			if(i.find('"is_lre":')!=-1):
+				lre = i[i.index(':'):]
+		if len(x)>0:
+			if x.find('vm')!=-1:
+                    		fwrite.write('Virtual Machine\n')
+                	elif x.find('azure')!=-1:
+                    		fwrite.write('Microsoft Azure\n')
+                	elif x.find('linux')!=-1:
+                    		fwrite.write('Linux Installer\n')
+                	elif x.find('amazon')!=-1 and x.find('saas')==-1:
+                    		fwrite.write('Amazon\n')
+                	elif x.find('saas')!=-1:
+                    		fwrite.write('SaaS\n')
 
-    for i in fobj:
-        if(i.find('"install_type":')!=-1):
-            x = i[i.index(':'):]
+		if 'true' in lre:
+			fwrite.write('LRE is enabled\n')
+		elif 'false' in lre:
+			fwrite.write('LRE is disabled\n')
 
-            if len(x)>0:
-                if x.find('vm')!=-1:
-                    fwrite.write('Virtual Machine\n')
-                elif x.find('azure')!=-1:
-                    fwrite.write('Microsoft Azure\n')
-                elif x.find('linux')!=-1:
-                    fwrite.write('Linux Installer\n')
-                elif x.find('amazon')!=-1 and x.find('saas')==-1:
-                    fwrite.write('Amazon\n')
-                elif x.find('saas')!=-1:
-                    fwrite.write('SaaS\n')
-            else:
-                print('The file is empty... ',conffile)
+		fwrite.close()
+		fobj.close()
+
+	except Exception as e:
+		print(e)
 
 def siloperf(logfile):
 	try:
@@ -1096,6 +1113,38 @@ def silostatus(logfile):
 
     fwrite.close()
     fobj.close()
+
+def silodiskusage(logfile):
+    try:
+        fobj = openfile(logfile)
+        fwrite = open(filename,'a')
+
+        lines = fobj.readlines()
+        silodisk_details = lines[-5:]
+
+        for x in silodisk_details:
+            if (x.find('DISK USE:')!=-1):
+                if (x.find('transaction data')!=-1 and x.find('environmental data')!=-1):
+                    x1 = str(x.split(':')[1])
+                    x2 = x1.split(',')
+                elif (x.find('free on disk')!=-1):
+                    n1 = str(x.split(':')[1])
+                    n2 = n1.split(' [')
+
+        if len(x2)>0:
+            fwrite.write('\n***** Silo Disk Usage Details *****\n')
+            for i in range(0,len(x2)):
+                fwrite.write('{0}\n'.format(str(x2[i].strip())))
+
+        if len(n2)>0:
+            for i in range(0,len(n2)):
+                fwrite.write('{0}\n'.format(str(n2[i]).strip().replace(']','')))
+
+        fobj.close()
+        fwrite.close()
+
+    except Exception as e:
+        print(e)
 
 ##Function to get the silo settings
 def silo_settings(logfile):
@@ -1304,12 +1353,14 @@ def movefiles(path):
                  shutil.move(os.path.abspath(file),dst)        
 
 ##Function to generate weblinks for output files
-def weblinks(path,filename,errorandwarn):
-	baseURL = 'http://support.nbttech.com/'
+def weblinks(file_create_dir,path,filename,errorandwarn):
+	baseURL = 'http://support.nbttech.com/data'
 	sysURL = ''
 	errURL = ''
 
-	tmpPath = str(os.path.dirname(path))[str(os.path.dirname(path)).index('data/'):]
+
+	##tmpPath = str(os.path.dirname(path))[str(os.path.dirname(path)).index('data/'):]
+	tmpPath	= str(file_create_dir).split('/data')[1]
 
 	sysURL = baseURL+tmpPath+'/'+filename
 	errURL = baseURL+tmpPath+'/'+errorandwarn
@@ -1350,6 +1401,7 @@ def setdetails4(argv):
                                 errorandwarn = str(casenum)+'_'+str(argv[2])+'_errorsandwarns.txt'
                                 filename = str(casenum)+'_'+str(argv[2])+'_systemdetails.txt'
                                 title = str('AIX_logs_'+str(casenum)+'_'+str(argv[2])).rstrip()
+
                         else:
                                 path = argv[0]
                                 casenum = argv[1]
@@ -1409,9 +1461,11 @@ def main():
     file_name = os.path.abspath(path)
 
     try:
+
     	cleanup(path,filename,errorandwarn)
-    	unzip(path)
+    	file_create_dir = unzip(path)
     	conn, c = dbconnect(path)
+
     except Exception as e:
 	print(e)
 
@@ -1433,10 +1487,10 @@ def main():
         dbclose(conn)
 
     navigatefolders()
-##    movefiles(path)
-##    cleanup()
-    weblinks(path,filename,errorandwarn)
+    weblinks(file_create_dir,path,filename,errorandwarn)
 ##    logalyzer_upload(email,title,customer,file_name)
+
     end = time.time()
     print('Took '+str(end-start)+'s'+' for the script to finish.... ')
+
 main()
