@@ -14,11 +14,7 @@ import json
 import time
 import sys
 import datetime
-from bokeh.plotting import figure, output_file, save
-from bokeh.layouts import column
-from bokeh.models.formatters import DatetimeTickFormatter
-from bokeh.palettes import Dark2_5 as palette
-import itertools
+import plots as plt
 
 start = time.time()
 
@@ -51,9 +47,9 @@ def cleanup(filepath,filename,errorandwarn):
             shutil.rmtree(os.path.abspath(fdname),ignore_errors=False)
 
 
-    for fname in os.listdir(cwd):
-        if (fname.endswith('.txt') and (fname.find(filename)!=-1 or fname.find(errorandwarn)!=-1)):
-            os.remove(fname)            
+#    for fname in os.listdir(cwd):
+#        if (fname.endswith('.txt') and (fname.find(filename)!=-1 or fname.find(errorandwarn)!=-1)):
+#            os.remove(fname)            
 
 ##Unzip the diag bundle zip file
 def unzip(filepath):
@@ -867,16 +863,37 @@ def procbymem(conffile):
 
 ##Function to get list of corrupt app traces    
 def crptapptraces(conffile):
-    fobj = openfile(conffile)
+    try:
+        fobj = openfile(conffile)
+        ver_key = ''
+        corrupt_dict = {}
 
-    fwrite = open(filename,'a')
-    fwrite.write('\n***** List of corrupt app traces ***** \n')
+        ver_prog = re.compile('^(\/var\/lib\/appinternals\/silo\/data\/corrupt_traces\/app\/)(\d+.\d+.\d+.\d+)')
 
-    for i in fobj:
-        fwrite.write(i)
+        fwrite = open(filename,'a')
 
-    fwrite.close()
-    fobj.close()
+        for line in fobj:
+            if(ver_prog.findall(line)):
+                ver_stage = ver_prog.findall(line)
+                ver_key = ver_stage[0][1]
+            elif(line.find('.apptrace')!=-1 and ver_key!=''):
+                server_stage = line.split('@')
+                if(ver_key not in corrupt_dict.keys()):
+                    corrupt_dict.update({ver_key:{}})
+                corrupt_dict[ver_key].update({server_stage[2]:server_stage[1]})
+
+        if len(corrupt_dict)>0:
+            fwrite.write('\n***** List Agents with Corrupt Traces ***** \n')
+            for k,v in corrupt_dict.items():
+                fwrite.write(k+'\n')
+                for key,value in v.items():
+                    fwrite.write('\t'+key+'\n')
+
+        fwrite.close()
+        fobj.close()
+
+    except Exception as e:
+        print(e)
 
 ##Function to get list of corrupt emx traces    
 def crptemxtraces(conffile):
@@ -1006,9 +1023,9 @@ def cores(conffile):
 
 ##Function to get the appliance type
 def appliancetype(conffile):
-
         try:
                 lre = ''
+
                 fobj = openfile(conffile)
                 fwrite = open(filename,'a')
                 fwrite.write('\n***** Appliance type *****\n')
@@ -1037,6 +1054,8 @@ def appliancetype(conffile):
 
                 fwrite.close()
                 fobj.close()
+                
+                return lre
 
         except Exception as e:
                 print(e)
@@ -1318,66 +1337,50 @@ def journalsizecheck(conffile):
 
 ##Function to get configuration and other system details
 def configdetails(conffile):
-
-    if(conffile.find('appinternals_version.txt')!=-1):
-        version(conffile)
-    else:
-        if(conffile.find('hostname.txt')!=-1):
+    try:
+        if(conffile.find('appinternals_version.txt')!=-1):
+            version(conffile)
+        elif(conffile.find('hostname.txt')!=-1):
             hostname(conffile)
-        else:
-            if(conffile.find('last_reboot.txt')!=-1):
-                lastreboot(conffile)
-            else:
-                if(conffile.find('processes_sorted_by_cpu.txt')!=-1):
-                    procbycpu(conffile)
-                else:
-                    if(conffile.find('processes_sorted_by_resident_size.txt')!=-1):
-                        procbymem(conffile)
-                    else:
-                        if(conffile.find('corrupt_app_traces.txt')!=-1 and conffile.find('num')==-1):   
-                            print('Skipping writing the list...')
-                            ##crptapptraces(conffile)
-                        else:
-                            if(conffile.find('corrupt_emx_traces.txt')!=-1 and conffile.find('num')==-1):
-                                print('Skipping writing the list...')
-                                ##crptemxtraces(conffile)
-                            else:
-                                if(conffile.find('corrupt_odb_files.txt')!=-1 and conffile.find('num')==-1):
-                                    crptodbfiles(conffile)
-                                else:
-                                    if(conffile.find('df_h.txt')!=-1):
-                                        dfh(conffile)
-                                    else:
-                                        if(conffile.find('supervisor_status.txt')!=-1):
-                                            syctlstatus(conffile)
-                                        else:
-                                            if(conffile.find('netstat_-aon.txt')!=-1):
-                                                netstataon(conffile)
-                                            else:
-                                                if(conffile.find('corefiles.txt')!=-1):
-                                                    cores(conffile)
-                                                else:
-                                                    if(conffile.find('lj.machine.json.txt')!=-1):
-                                                        appliancetype(conffile)
-                                                    else:
-                                                        if(conffile.find('lj.silo_settings.json.txt')!=-1):
-                                                                silo_settings(conffile)
-                                                        else:
-                                                            if(conffile.find('lj.transaction_types_ALL.json.txt')!=-1):
-                                                                txntypes(conffile)
-                                                            else:
-                                                                if(conffile.find('lj.application_definitions.json.txt')!=-1):
-                                                                        definedapps(conffile)
-                                                                else:
-                                                                    if(conffile.find('system_details.txt')!=-1):
-                                                                        resourceinfo(conffile)
-                                                                    else:
-                                                                        if (conffile.find('lj.cluster.cluster_nodes.json.txt')!=-1):
-                                                                                clusterinfo(conffile)
-                                                                        else:
-                                                                            if (conffile.find('disk_usage_silo_data.txt')!=-1):
-                                                                                journalsizecheck(conffile)
+        elif(conffile.find('last_reboot.txt')!=-1):
+            lastreboot(conffile)
+        elif(conffile.find('processes_sorted_by_cpu.txt')!=-1):
+            procbycpu(conffile)
+        elif(conffile.find('processes_sorted_by_resident_size.txt')!=-1):
+            procbymem(conffile)
+        elif(conffile.find('corrupt_app_traces.txt')!=-1 and conffile.find('num')==-1):   
+            print('Skipping writing the list...')
+            crptapptraces(conffile)
+        elif(conffile.find('corrupt_emx_traces.txt')!=-1 and conffile.find('num')==-1):
+            print('Skipping writing the list...')
+            ##crptemxtraces(conffile)
+        elif(conffile.find('corrupt_odb_files.txt')!=-1 and conffile.find('num')==-1):
+            crptodbfiles(conffile)
+        elif(conffile.find('df_h.txt')!=-1):
+            dfh(conffile)
+        elif(conffile.find('supervisor_status.txt')!=-1):
+            syctlstatus(conffile)
+        elif(conffile.find('netstat_-aon.txt')!=-1):
+            netstataon(conffile)
+        elif(conffile.find('corefiles.txt')!=-1):
+            cores(conffile)
+        elif(conffile.find('lj.machine.json.txt')!=-1):
+            appliancetype(conffile)
+        elif(conffile.find('lj.silo_settings.json.txt')!=-1):
+            silo_settings(conffile)
+        elif(conffile.find('lj.transaction_types_ALL.json.txt')!=-1):
+            txntypes(conffile)
+        elif(conffile.find('lj.application_definitions.json.txt')!=-1):
+            definedapps(conffile)
+        elif(conffile.find('system_details.txt')!=-1):
+            resourceinfo(conffile)
+        elif(conffile.find('lj.cluster.cluster_nodes.json.txt')!=-1):
+            clusterinfo(conffile)
+        elif(conffile.find('disk_usage_silo_data.txt')!=-1):
+            journalsizecheck(conffile)
 
+    except Exception as e:
+        print(e)
 
                     
 ##Function to search for all Errors and Warnings in log files
@@ -1408,22 +1411,6 @@ def errorsandwarns(logfile):
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
 
-##Function to move files to location where the bundle is present
-def movefiles(path):
-    cwd = os.getcwd()
-    dst = os.path.abspath(os.path.dirname(path))
-    
-    for file in os.listdir(os.getcwd()):
-        filelist = (os.path.join(os.path.abspath(file),dst))
-        if (file.endswith('.txt') and (file.find('errorsandwarns')!=-1 or file.find('analysisserverdetails')!=-1)):
-            try:
-                print('Moving '+os.path.abspath(file)+' to '+dst)
-                shutil.move(os.path.abspath(file),dst)
-            except Exception as e:
-                 print(file+' already exists...Removing file')
-                 os.remove(os.path.join(dst,file))
-                 shutil.move(os.path.abspath(file),dst)        
-
 ##Function to generate weblinks for output files
 def weblinks(file_create_dir,path,filename,errorandwarn):
         baseURL = 'http://support.nbttech.com/data'
@@ -1448,346 +1435,6 @@ def weblinks(file_create_dir,path,filename,errorandwarn):
 
         print('\n*****************************\n')
 
-#Function to do the plots
-def plots(casenum,file_create_dir,path):
-    print('Plotting charts...')
-    try:
-        cpuplots(casenum,file_create_dir,path)
-        memplots(casenum,file_create_dir,path)
-        diskplots(casenum,file_create_dir,path)
-        siloplots(casenum,file_create_dir,path)
-    except Exception as e:
-        print(e)
-
-def siloplots(casenum,file_create_dir,path):
-    try:
-        silo_plot = casenum+'_silo.html'
-        date_key = ''
-        apptx_values = {}
-        dispatch_values = {}
-        query_values = {}
-        stxstore_values = {}
-        stitcher_values = {}
-        emx_values = {}
-        odb_values = {}
-
-        file_to_read = os.path.abspath(file_create_dir)+'/files/var/log/appinternals/sensor/today/top_by_cpu.out'
-        fobj = open(file_to_read)
-
-        date_prog = re.compile('^\d{4}-\d{2}-\d{2}[ ]\d{2}:\d{2}:\d{2}')
-        date_prog1 = re.compile('^\d{2}\/\d{2}\/\d{2}[ ]\d{2}:\d{2}:\d{2}')
-        query_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_query).*-port[ ]([^ ]+)')
-        dispatch_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_dispatch).*-data_path[ ]([^ ]+)')
-        apptx_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_apptx_store).*-port[ ]([^ ]+)')
-        stxstore_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_stx_store).*-port[ ]([^ ]+)')
-        stitcher_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_stitcher).*-port[ ]([^ ]+)')
-        emx_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/silo_emx_store).*-port[ ]([^ ]+)')
-        odb_prog = re.compile('^[ ]*(\d+)[ ]+([^ ]+[ ]+){7}([^ ]+)[ ].*(bin/odb_server).*-config_dir[ ]([^ ]+)')
-
-        for line in fobj:
-            if(date_prog.findall(line)):
-                date_key = date_prog.findall(line)
-            elif(date_prog1.findall(line)):
-                date_key = date_prog1.findall(line)
-            elif(query_prog.findall(line) and date_key!=''):
-                query_stage = query_prog.findall(line)
-                if(query_stage[0][0] not in query_values.keys()):
-                    query_values.update({query_stage[0][0]:{}})
-                query_values[query_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(query_stage[0][2])})
-            elif(dispatch_prog.findall(line) and date_key!=''):
-                dispatch_stage = dispatch_prog.findall(line)
-                if(dispatch_stage[0][0] not in dispatch_values.keys()):
-                    dispatch_values.update({dispatch_stage[0][0]:{}})
-                dispatch_values[dispatch_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(dispatch_stage[0][2])})
-            elif(apptx_prog.findall(line) and date_key!=''):
-                apptx_stage = apptx_prog.findall(line)
-                if(apptx_stage[0][0] not in apptx_values.keys()):
-                    apptx_values.update({apptx_stage[0][0]:{}})
-                apptx_values[apptx_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(apptx_stage[0][2])})
-            elif(stxstore_prog.findall(line) and date_key!=''):
-                stxstore_stage = stxstore_prog.findall(line)
-                if(stxstore_stage[0][0] not in stxstore_values.keys()):
-                    stxstore_values.update({stxstore_stage[0][0]:{}})
-                stxstore_values[stxstore_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(stxstore_stage[0][2])})
-            elif(stitcher_prog.findall(line) and date_key!=''):
-                stitcher_stage = stitcher_prog.findall(line)
-                if(stitcher_stage[0][0] not in stitcher_values.keys()):
-                    stitcher_values.update({stitcher_stage[0][0]:{}})
-                stitcher_values[stitcher_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(stitcher_stage[0][2])})
-            elif(emx_prog.findall(line) and date_key!=''):
-                emx_stage = emx_prog.findall(line)
-                if(emx_stage[0][0] not in emx_values.keys()):
-                    emx_values.update({emx_stage[0][0]:{}})
-                emx_values[emx_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(emx_stage[0][2])})
-            elif(odb_prog.findall(line) and date_key!=''):
-                odb_stage = odb_prog.findall(line)
-                if(odb_stage[0][0] not in odb_values.keys()):
-                    odb_values.update({odb_stage[0][0]:{}})
-                odb_values[odb_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%Y-%m-%d %H:%M:%S'):float(odb_stage[0][2])})
-
-        fobj.close()
-
-        output_file(silo_plot, title="Silo CPU")
-        datetime_tick_formats = {
-            key: ["%a %b %d %H:%M:%S"]
-            for key in ("seconds", "minsec", "minutes", "hourmin", "hours", "days")}
-
-        p1 = figure(title="Silo DISPATCH CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p1.xaxis.axis_label="Time"
-        p1.yaxis.axis_label="CPU %"
-        p1.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p2 = figure(title="Silo APPTX CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p2.xaxis.axis_label="Time"
-        p2.yaxis.axis_label="CPU %"
-        p2.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p3 = figure(title="Silo QUERY CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p3.xaxis.axis_label="Time"
-        p3.yaxis.axis_label="CPU %"
-        p3.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p4 = figure(title="Silo STX_STORE CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p4.xaxis.axis_label="Time"
-        p4.yaxis.axis_label="CPU %"
-        p4.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p5 = figure(title="Silo STITCHER CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p5.xaxis.axis_label="Time"
-        p5.yaxis.axis_label="CPU %"
-        p5.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p6 = figure(title="Silo EMX_STORE CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p6.xaxis.axis_label="Time"
-        p6.yaxis.axis_label="CPU %"
-        p6.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        p7 = figure(title="ODB CPU",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p7.xaxis.axis_label="Time"
-        p7.yaxis.axis_label="CPU %"
-        p7.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        colors = itertools.cycle(palette)
-
-        for k, color in zip(dispatch_values.keys(),colors):
-            stage = dispatch_values[k]
-            p1.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(apptx_values.keys(),colors):
-            stage = apptx_values[k]
-            p2.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(query_values.keys(),colors):
-            stage = query_values[k]
-            p3.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(stxstore_values.keys(),colors):
-            stage = stxstore_values[k]
-            p4.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(stitcher_values.keys(),colors):
-            stage = stitcher_values[k]
-            p5.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(emx_values.keys(),colors):
-            stage = emx_values[k]
-            p6.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        for k, color in zip(odb_values.keys(),colors):
-            stage = odb_values[k]
-            p7.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-
-        p = column(p1,p2,p3,p4,p5,p6,p7)
-
-        save(p)
-            
-    except Exception as e:
-        print(e)
-
-def diskplots(casenum,file_create_dir,path):
-    try:
-        disk_plot = casenum+'_diskplot.html'
-        disk_values = {}
-        date_key = ''
-     
-        file_to_read = os.path.abspath(file_create_dir)+'/files/var/log/appinternals/sensor/today/iostat.out'
-        fobj = open(file_to_read)
-
-        disk_prog = re.compile('^([^ ]+)[ ]+([^ ]+[ ]+){12}([0-9]*\.[0-9]+|[0-9]+)[ %]*$')
-        datematch = re.compile('^\d{2}\/\d{2}\/\d{4}[ ]\d{2}:\d{2}:\d{2}')
-        date_prog = re.compile('^\d{2}\/\d{2}\/\d{2}[ ]\d{2}:\d{2}:\d{2}')
-
-        for line in fobj:
-            if(datematch.findall(line)):
-                date_key = datematch.findall(line)
-            elif(disk_prog.findall(line) and date_key!=''):
-                disk_stage = disk_prog.findall(line)
-                if(disk_stage[0][0] not in disk_values.keys()):
-                    disk_values.update({disk_stage[0][0]:{}})
-                disk_values[disk_stage[0][0]].update({datetime.datetime.strptime(date_key[0],'%m/%d/%Y %H:%M:%S'):float(disk_stage[0][2])})
-
-        fobj.close()
- 
-        output_file(disk_plot, title="DISK UTILIZATION")
-        datetime_tick_formats = {
-            key: ["%a %b %d %H:%M:%S"]
-            for key in ("seconds", "minsec", "minutes", "hourmin", "hours", "days")}
-
-        p = figure(title="Disk Utilization",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p.xaxis.axis_label="Time"
-        p.yaxis.axis_label="Disk %"
-        p.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-
-        colors = itertools.cycle(palette)
-
-        for k, color in zip(disk_values.keys(),colors):
-            stage = disk_values[k]
-            p.line(list(stage.keys()),list(stage.values()),legend_label=k,line_width=2,color=color)
-
-        save(p)
-
-    except Exception as e:
-        print(e)
-
-
-def memplots(casenum,file_create_dir,path):
-    try:
-        mem_plot = casenum+'_memplot.html'
-        pltvalues = {}
-        pltvalues_final = []
-
-        file_to_read = os.path.abspath(file_create_dir)+'/files/var/log/appinternals/sensor/today/vmstat.out'
-        fobj = open(file_to_read)
-
-        for line in fobj:
-            if(line.find('memory')!=-1 or line.find('free')!=-1):
-                continue
-            else:
-                k = re.findall('^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}',line)[0]
-
-                prog = re.compile('^([^ ]+[ ]+){5}(([0-9]*\.[0-9]+|[0-9]+[ ]+){3})([^ ]+[ ]+){10}[^ ]+[ ]*$')
-                match = prog.findall(line)
-                result = re.findall('[0-9]*[0-9]*[0-9]*[0-9]',match[0][1])
-                for x in range(0,len(result)):
-                    result[x] = int(result[x])
-
-                v = sum(result)/1000
-                pltvalues.update({k:v})
-
-        fobj.close()
-
-        pltvalues_sorted = sorted(pltvalues)
-        for x in pltvalues_sorted:
-            pltvalues_final.append(pltvalues.get(x))
-
-        pltvalues_final = [float(i) for i in pltvalues_final]
-        pltvalues_sorted = [datetime.datetime.strptime(x.strip(),'%Y-%m-%d %H:%M:%S') for x in pltvalues_sorted]
-
-        output_file(mem_plot, title="Memory Usage")
-        datetime_tick_formats = {
-            key: ["%a %b %d %H:%M:%S"]
-            for key in ("seconds", "minsec", "minutes", "hourmin", "hours", "days")}
-
-        p = figure(title="Free Memory",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p.xaxis.axis_label="Time"
-        p.yaxis.axis_label="Memory(mb)"
-        p.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-        p.line(pltvalues_sorted,pltvalues_final,line_width=2,color='red')
-
-        save(p)
-
-    except Exception as e:
-     print(e)
-
-def cpuplots(casenum,file_create_dir,path):
-    try:
-        cpu_plot = casenum+'_cpuplot.html'
-
-        pltvalues = {}
-        cpuidle = {}
-        cpuuser = {}
-        cpusys = {}
-        cpuidle_final = []
-        cpuuser_final = []
-        cpusys_final = []
-
-        file_to_read = os.path.abspath(file_create_dir)+'/files/var/log/appinternals/sensor/today/top-15s.out'
-
-        fobj = open(file_to_read)
-
-        for line in fobj:
-            match = re.search(r'\d\d\d\d-\d\d-\d\d',line)
-            if match:
-                k = line
-            elif (line.find('Cpu(s):')!=-1):
-                v = line.split(':')[1]
-
-                pltvalues.update({k:v})
-
-        fobj.close()
-
-        for k,v in pltvalues.items():
-            k_id = k
-            v_idle = v.split(',')[3]
-            v_user = v.split(',')[0]
-            v_sys = v.split(',')[1]
-
-            cpuidle.update({k_id:v_idle.strip('%id')})
-            cpuuser.update({k_id:v_user.strip('%us')})
-            cpusys.update({k_id:v_sys.strip('%sy')})
-
-        cpuidle_sorted = sorted(cpuidle)
-        cpuuser_sorted = sorted(cpuuser)
-        cpusys_sorted = sorted(cpusys)
-
-        for x in cpuidle_sorted:
-            cpuidle_final.append(cpuidle.get(x))
-
-        for x in cpuuser_sorted:
-            cpuuser_final.append(cpuuser.get(x))
-
-        for x in cpusys_sorted:
-            cpusys_final.append(cpusys.get(x))
-
-        cpuidle_final = [float(i) for i in cpuidle_final]
-        cpuidle_sorted = [datetime.datetime.strptime(x.strip(),'%Y-%m-%d %H:%M:%S') for x in cpuidle_sorted]
-
-        cpuuser_final = [float(i) for i in cpuuser_final]
-        cpuuser_sorted = [datetime.datetime.strptime(x.strip(),'%Y-%m-%d %H:%M:%S') for x in cpuuser_sorted]
-
-        cpusys_final = [float(i) for i in cpusys_final]
-        cpusys_sorted = [datetime.datetime.strptime(x.strip(),'%Y-%m-%d %H:%M:%S') for x in cpusys_sorted] 
-
-
-        output_file(cpu_plot, title="CPU Usage")
-        datetime_tick_formats = {
-            key: ["%a %b %d %H:%M:%S"]
-            for key in ("seconds", "minsec", "minutes", "hourmin", "hours", "days")}
-
-        p1 = figure(title="CPU Idle",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p1.xaxis.axis_label="Time"
-        p1.yaxis.axis_label="CPU %"
-        p1.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-        p1.line(cpuidle_sorted,cpuidle_final, line_width = 2, color = 'red')
-
-        p2 = figure(title="CPU User",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p2.xaxis.axis_label="Time"
-        p2.yaxis.axis_label="CPU %"
-        p2.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-        p2.line(cpuuser_sorted,cpuuser_final, line_width = 2, color = 'red')
-
-        p3 = figure(title="CPU System",plot_width=800, plot_height=350,x_axis_type="datetime")
-        p3.xaxis.axis_label="Time"
-        p3.yaxis.axis_label="CPU %"
-        p3.xaxis.formatter = DatetimeTickFormatter(**datetime_tick_formats)
-        p3.line(cpusys_sorted,cpusys_final, line_width = 2, color = 'red')
-
-        p = column(p1,p2,p3)
-        save(p)
-
-    except Exception as e:
-        print(e)
 
 ##Function to upload bundle to logalyzer using R
 def upload(casenum,path):
@@ -1859,7 +1506,7 @@ def setdetails3(argv):
 ##Main function
 def main():
     global filename
-    global errorandwarn    
+    global errorandwarn
     
     if len(sys.argv)==4:
         try:
@@ -1907,8 +1554,9 @@ def main():
 
     navigatefolders()
     weblinks(file_create_dir,path,filename,errorandwarn)
-    plots(casenum,file_create_dir,path)
-    upload(casenum,path)
+
+    plt.plots(casenum,file_create_dir,path)
+#    upload(casenum,path)
     permfix(file_create_dir)    
 
     end = time.time()
