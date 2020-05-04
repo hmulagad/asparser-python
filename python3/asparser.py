@@ -14,6 +14,7 @@ import json
 import time
 import sys
 import datetime
+import subprocess
 import plots as plt
 
 start = time.time()
@@ -87,7 +88,6 @@ def openfile(file):
 ##Connect to agentconfig database
 def dbconnect(path):
 
-    ##fileloc = os.path.join(r'files\var\lib\appinternals-yarder\lumberjack-svc-agentconfig\config\initial')
     fileloc = os.path.join('files/var/lib/appinternals-yarder/lumberjack-svc-agentconfig/config/initial')
     abspath = os.path.abspath(os.path.join('.',fileloc,'cfg_db'))
     
@@ -100,9 +100,17 @@ def dbconnect(path):
         
     else:
 
-        print('Database File does not exists..\n')
-        conn = ' '
-        c = ' '
+        fileloc = os.path.join('files/var/lib/appinternals-yarder/lumberjack-svc-agentconfig/profiles/global')
+        abspath = os.path.abspath(os.path.join('.',fileloc,'cfg_db'))
+        
+        if (os.path.exists(abspath)):
+            print('Connection to db succeeded...')
+            conn = sqlite3.connect(abspath)
+            c = conn.cursor()
+        else:
+            print('Database File does not exists..\n')
+            conn = ' '
+            c = ' '
 
     return conn, c
 
@@ -1442,8 +1450,14 @@ def upload(casenum,path):
         script_name = 'logalyze'
         print('Uploading bundle to logalyzer.... ')
   
-        execute_string = ('{0} {1} {2}'.format(script_name,casenum,path))
-        os.system(execute_string)
+#        execute_string = ('{0} {1} {2}'.format(script_name,casenum,path))
+#        os.system(execute_string)
+        p = subprocess.Popen([script_name,casenum,path],shell=False)
+#        p = subprocess.Popen([script_name,casenum,path],stdout=subprocess.PIPE,shell=False)
+        logalyze_pid = p.pid
+     
+        print('Logalyzer running under PID:',logalyze_pid)
+#        print(p.communicate()[0])
         
     except Exception as e:
         print(e)
@@ -1556,7 +1570,7 @@ def main():
     weblinks(file_create_dir,path,filename,errorandwarn)
 
     plt.plots(casenum,file_create_dir,path)
-#    upload(casenum,path)
+    upload(casenum,path)
     permfix(file_create_dir)    
 
     end = time.time()
