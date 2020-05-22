@@ -331,10 +331,31 @@ def navigatefolders():
                 if (logfile.find('messages')!=-1):
                         OOM_killer(logfile)
                         segfault(logfile)
-                            
+
+        nginxmergefiles(cwd)                            
+
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
 
+
+def nginxmergefiles(cwd):
+    try:
+
+        fwrite = open(filename,'a')
+     
+        DIR_TO_READ = cwd+'/files/etc/appinternals/'
+        SUB_STRING = '.rpm'
+        res = [i for i in os.listdir(DIR_TO_READ) if SUB_STRING in i] 
+
+        if len(res)>0:
+            fwrite.write('\n***** NGINX Merge files found *****\n')
+            fwrite.write('Found Ngnix merge files - {0}\n'.format(res))
+            fwrite.write('Make sure nginx http/https conf files do not have any DIFF with existing conffiles\n')
+
+        fwrite.close()
+
+    except Exception as e:
+        print(e)
 
 ##Function to look into issues in silo_query-queries.log
 def siloqueryissues(logfile):
@@ -1293,7 +1314,7 @@ def journalsizecheck(conffile):
     try:
         odb1k = ''
         journal1k = ''
-        disksize1k = ''
+        disksize1k = []
 
         fobj = openfile(conffile)
         file_to_read = os.path.dirname(conffile)+'/df_kb.txt'
@@ -1312,20 +1333,24 @@ def journalsizecheck(conffile):
             for n in fobj:
                 if '/mnt/data' in n:
                     disksize1k = str(n.strip()).split()
-
             fobj.close()
 
+        if conffile.find('disk_usage_silo_data_mb.txt')!=-1:
+            journal1k = int(journal1k)*1024
+            odb1k = int(odb1k)*1024
 
         if (odb1k!='' or journal1k!=''):
             fwrite = open(filename,'a')
             fwrite.write('\n***** Journal/ODB size check *****\n')
  
-            if len(disksize1k) == 5:
+            if len(disksize1k) == 0:
+                disksize1k = []
+            elif len(disksize1k) == 5:
                 disksize = disksize1k[0]
             else:
                 disksize = disksize1k[1]
 
-            if (disksize1k!=-1):
+            if (len(disksize1k)!=0):
                 journalpercent = int(journal1k)*100/int(disksize)
                 odbpercent     = int(odb1k)*100/int(disksize)
 
@@ -1336,10 +1361,26 @@ def journalsizecheck(conffile):
             else:
                 fwrite.write('Journal size: {0}kb\n'.format(journal1k))
                 fwrite.write('ODB store size: {0}kb\n'.format(odb1k))
-                fwrite.write('Could not determine /mnt/data size')
+                fwrite.write('Could not determine /mnt/data size\n')
 
             fwrite.close()
 
+    except Exception as e:
+        print(e)
+
+def netstat(conffile):
+    try:
+        if(os.path.isfile(conffile)):
+            fobj = openfile(conffile)
+            lines = fobj.readlines()
+            if len(lines)>0:
+                fwrite = open(filename,'a')
+                fwrite.write('\n***** Nestat tcp Details *****\n')
+                for x in lines:
+                    fwrite.write(x.lstrip())
+                fwrite.close()
+            fobj.close()         
+    
     except Exception as e:
         print(e)
 
@@ -1358,18 +1399,18 @@ def configdetails(conffile):
             procbymem(conffile)
         elif(conffile.find('corrupt_app_traces.txt')!=-1 and conffile.find('num')==-1):   
             print('Skipping writing the list...')
-            crptapptraces(conffile)
+#            crptapptraces(conffile)
         elif(conffile.find('corrupt_emx_traces.txt')!=-1 and conffile.find('num')==-1):
             print('Skipping writing the list...')
-            ##crptemxtraces(conffile)
+#            crptemxtraces(conffile)
         elif(conffile.find('corrupt_odb_files.txt')!=-1 and conffile.find('num')==-1):
             crptodbfiles(conffile)
         elif(conffile.find('df_h.txt')!=-1):
             dfh(conffile)
         elif(conffile.find('supervisor_status.txt')!=-1):
             syctlstatus(conffile)
-        elif(conffile.find('netstat_-aon.txt')!=-1):
-            netstataon(conffile)
+#        elif(conffile.find('netstat_-aon.txt')!=-1):
+#            netstataon(conffile)
         elif(conffile.find('corefiles.txt')!=-1):
             cores(conffile)
         elif(conffile.find('lj.machine.json.txt')!=-1):
@@ -1384,11 +1425,13 @@ def configdetails(conffile):
             resourceinfo(conffile)
         elif(conffile.find('lj.cluster.cluster_nodes.json.txt')!=-1):
             clusterinfo(conffile)
-        elif(conffile.find('disk_usage_silo_data.txt')!=-1):
+        elif(conffile.find('disk_usage_silo_data.txt')!=-1 or conffile.find('disk_usage_silo_data_mb.txt')!=-1):
             journalsizecheck(conffile)
+        elif(conffile.find('netstat.all_tcp_connection_state_counts.txt')!=-1):
+            netstat(conffile)
 
     except Exception as e:
-        print(e)
+        print(e,conffile)
 
                     
 ##Function to search for all Errors and Warnings in log files
