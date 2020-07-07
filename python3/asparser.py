@@ -277,7 +277,7 @@ def navigatefolders():
                     else:
                         if ((x.endswith('.log') or x.endswith('.out'))):
                             filelist.append(os.path.join(os.path.abspath(path),x))
-                        elif(x.find('messages')!=-1):
+                        elif(x.find('messages')!=-1 or x.find('yarder-core')!=-1):
                                 gnrlfiles.append(os.path.join(os.path.abspath(path),x))
                                 
     try:
@@ -326,17 +326,24 @@ def navigatefolders():
                                 webuih2db(logfile)
                         elif(logfile.find('sensor-0.stderr.log')!=-1):
                                 nospace(logfile)
+                        elif(logfile.find('negotiator.log')!=-1):
+                                code500(logfile)
+                        elif(logfile.find('_rb_tx.log')!=-1 or logfile.find('_rb_active_time.log')!=-1):
+                                txndetailloadtimes(logfile)
+                        elif(logfile.find('ferryman3-stats.log')!=-1):
+                                ferrymanoutofspace(logfile) 
 
         for logfile in gnrlfiles:
-                if (logfile.find('messages')!=-1):
-                        OOM_killer(logfile)
-                        segfault(logfile)
+            if (logfile.find('messages')!=-1):
+                OOM_killer(logfile)
+                segfault(logfile)
+            elif(logfile.find('yarder-core')!=-1):
+                dbupgrade1143(logfile)
 
         nginxmergefiles(cwd)                            
 
     except FileNotFoundError:
         print(logfile,'File does not exist...\n')
-
 
 def nginxmergefiles(cwd):
     try:
@@ -354,6 +361,32 @@ def nginxmergefiles(cwd):
 
         fwrite.close()
 
+    except Exception as e:
+        print(e)
+
+def dbupgrade1143(logfile):
+    hit = 0
+    error = ''
+
+    try:
+        fobj = openfile(logfile)
+        fwrite = open(filename,'a')
+
+        for line in fobj:
+            if(line.find('[manager.WARNING] OperationalError: (OperationalError)')!=-1 and line.find('no such column: registry')!=-1):
+                hit = hit+1
+                error = line
+                break
+                
+        if hit>0:
+            fwrite.write('\n***** Missing Registry table (APMDEV-4288) *****\n')
+            fwrite.write('Possible DB corruption during upgrade.\nPlease check yarder-core log for more details.\n')
+            fwrite.write('"{0}"\n'.format(error))
+            fwrite.write('Workaround:(as root)\n\tsupervisorctl stop all\n\tcd /var/lib/appinternals-yarder/lumberjack-svc-manager/profiles/global\n\trm ./*\n\tsupervisorctl start all\n')
+
+        fwrite.close()
+        fobj.close()
+                       
     except Exception as e:
         print(e)
 
@@ -411,6 +444,80 @@ def callsperseg(logfile):
         except Exception as e:
                 print(e)
 
+def ferrymanoutofspace(logfile):
+    try:
+        OOS = 0
+        fobj = open(logfile)
+        fwrite = open(filename,'a')
+ 
+        for line in fobj:
+            if line.find('failed to download due to out of space')!=-1:
+                OOS+=1
+        if OOS>1:
+            fwrite.write('\n****** ferryman3:files failed to download *****\n')
+            fwrite.write('Ferryman3 unable to download files due to out of space\n')
+            fwrite.write('Failed to download due to out of space occurred {0} times\n'.format(OOS))
+            fwrite.write('Please check ferryman3.stats.log for more details\n')
+
+        fobj.close()
+        fwrite.close()
+    except Exception as e:
+        print(e)
+
+def txndetailloadtimes(logfile):
+    try:
+        loadtimes = []
+        loadtime_prog = re.compile('^(\d{4}-\d{2}-\d{2}).*(finished in )(\d{3,}\.\d{2}).*')
+
+        fobj = open(logfile)
+        fwrite = open(filename,'a')
+  
+        for line in fobj:
+            if(loadtime_prog.findall(line)):
+                loadtime_stage = loadtime_prog.findall(line)
+                loadtimes.append(float(loadtime_stage[0][2]))
+
+        if(len(loadtimes)>0):
+            if(logfile.find('_rb_tx.log')!=-1):
+                fwrite.write('\n***** Txn detail high call tree/search times *****\n')
+                fwrite.write('Found atleast {0} instances of txn detail taking more than 99s to load\n'.format(len(loadtimes)))
+                fwrite.write('Check _rb_tx.log for more details\n')
+            else:
+                fwrite.write('\n***** Txn detail high load times *****\n')
+                fwrite.write('Found atleast {0} instances of txn detail taking more than 99s to load\n'.format(len(loadtimes)))
+                fwrite.write('Check _rb_active_time.log for more details\n')
+
+        fobj.close()
+        fwrite.close()
+
+    except Exception as e:
+        print(e)
+
+#Function to catch  500 errors
+#Use following regex to be more granular and informative - ^(\d{4}-\d{2}-\d{2}).*(code: 500).*("INTERNAL_ERROR",)
+def code500(logfile):
+    try:
+        error500 = 0
+        error500_prog = re.compile('.*(code: 500)')
+
+        fobj = open(logfile)
+        fwrite = open(filename,'a')
+
+        for line in fobj:
+            if error500_prog.findall(line):
+                print(line)
+                error500+=1
+
+        if error500>0:
+            fwrite.write('\n***** Negotiator HTTP 500 errors *****\n')
+            fwrite.write('code 500 errors occurred {0} times\n'.format(error500))
+            fwrite.write('Check negotiator.log for more details\n')
+
+        fobj.close()
+        fwrite.close()
+        
+    except Exception as e:
+        print(e)
 
 ##Function to catch no space issue in sensor log
 def nospace(logfile):
@@ -1310,6 +1417,41 @@ def clusterinfo(logfile):
         except Exception as e:
                 print(e)
 
+def journalinputcheck(conffile):
+    try:
+        size_mb = 0
+        folder_name = ''
+        journal_input_dict = {}
+
+        fobj = openfile(conffile)
+        fwrite = open(filename,'a')
+        
+        input_prog = re.compile('^(\d+)(.*input)')
+        
+        for line in fobj:
+            if(input_prog.findall(line)):
+                input_stage = input_prog.findall(line)
+                size_mb = int(input_stage[0][0])
+                folder_name = input_stage[0][1].strip('\t')
+                if size_mb>1000000:
+                    journal_input_dict.update({folder_name:size_mb})
+
+        if len(journal_input_dict)>0:
+            fwrite.write('\n***** Journal Input folder size >1TB *****\n')
+            for key,value in journal_input_dict.items():
+                fwrite.write('{0} size is {1} MB\n'.format(key,value))
+
+            fwrite.write('\nWorkaround:(potential data loss)\n')
+            fwrite.write('\t>supervisorctl stop silo_dispatch\n')
+            fwrite.write('\t>rm -rf <folder_name_from_above>\n')
+            fwrite.write('\t>supervisorctl start silo_dispatch\n')
+          
+        fwrite.close()
+        fobj.close()
+
+    except Exception as e:
+        print(e)
+
 def journalsizecheck(conffile):
     try:
         odb1k = ''
@@ -1427,6 +1569,8 @@ def configdetails(conffile):
             clusterinfo(conffile)
         elif(conffile.find('disk_usage_silo_data.txt')!=-1 or conffile.find('disk_usage_silo_data_mb.txt')!=-1):
             journalsizecheck(conffile)
+        elif(conffile.find('disk_usage_journal_mb.txt')!=-1):
+            journalinputcheck(conffile)
         elif(conffile.find('netstat.all_tcp_connection_state_counts.txt')!=-1):
             netstat(conffile)
 
