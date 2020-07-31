@@ -1,4 +1,4 @@
-#!/opt/support/python37/bin/python3
+#!/usr/bin/python3
 #############################################
 ## Author: Harikishan Mulagada
 ## Role  : Staff Engineer SteelCentral
@@ -15,6 +15,7 @@ import time
 import sys
 import datetime
 import subprocess
+import argparse
 import plots as plt
 
 start = time.time()
@@ -92,11 +93,12 @@ def dbconnect(path):
     abspath = os.path.abspath(os.path.join('.',fileloc,'cfg_db'))
     
     if (os.path.exists(abspath)):
-
-        print('Connection to db succeeded...')
-        
-        conn = sqlite3.connect(abspath)
-        c = conn.cursor()
+        try:
+            conn = sqlite3.connect(abspath)
+            c = conn.cursor()
+            print('Connection to db succeeded...')
+        except Exception as e:
+            print(e)
         
     else:
 
@@ -104,9 +106,12 @@ def dbconnect(path):
         abspath = os.path.abspath(os.path.join('.',fileloc,'cfg_db'))
         
         if (os.path.exists(abspath)):
-            print('Connection to db succeeded...')
-            conn = sqlite3.connect(abspath)
-            c = conn.cursor()
+            try:
+                conn = sqlite3.connect(abspath)
+                c = conn.cursor()
+                print('Connection to db succeeded...')
+            except Exception as e:
+                print(e)
         else:
             print('Database File does not exists..\n')
             conn = ' '
@@ -303,6 +308,7 @@ def navigatefolders():
                             sid(logfile)
                             invalidstrtime(logfile)
                             emxtraceparse(logfile)
+                            corruptbmfile(logfile)
                         elif(logfile.find('silo_apptx_store.log')!=-1):
                                 callsperseg(logfile)
                         elif(logfile.find('silo_query-queries.log')!=-1):
@@ -505,7 +511,6 @@ def code500(logfile):
 
         for line in fobj:
             if error500_prog.findall(line):
-                print(line)
                 error500+=1
 
         if error500>0:
@@ -742,6 +747,29 @@ def invalidstrtime(logfile):
         fwrite.close()
         fobj.close()
 
+def corruptbmfile(logfile):
+    try:
+        errorstring = 'ERROR: Unable to load [corrupt?] persistent BM file'
+        cnt = 0
+
+        fobj = openfile(logfile)
+        fwrite = open(filename,'a')
+
+        for line in fobj:
+            if errorstring in line:
+                cnt+=1
+
+        if cnt>1:
+            fwrite.write('\n***** Corrupt journal BM files *****\n')
+            fwrite.write('Corrupt journal BM file error message occurred {0} time(s)\n'.format(cnt))
+            fwrite.write('Might lead to silo dispatch crashes.\nBackup and remove the BM file causing the issue.\n')
+            fwrite.write('Please check silo_dispatch logs for details...\n')
+
+        fwrite.close()
+        fobj.close()
+
+    except Exception as e:
+        print(e)
 
 ##Function to get the particle hash collision errors in stitcher log
 def stitcherhash(logfile):
@@ -1657,74 +1685,37 @@ def permfix(file_create_dir):
 
     except Exception as e:
         print(e)
-
-##Function to set details when we have 4 arguments
-def setdetails4(argv):
-        try:
-                if argv[1].isdigit():
-                        if argv[2]!='':
-                                path = argv[0]
-                                casenum = argv[1]
-                                errorandwarn = str(casenum)+'_'+str(argv[2])+'_errorsandwarns.txt'
-                                filename = str(casenum)+'_'+str(argv[2])+'_systemdetails.txt'
-                                title = str('AIX_logs_'+str(casenum)+'_'+str(argv[2])).rstrip()
-
-                        else:
-                                path = argv[0]
-                                casenum = argv[1]
-                                errorandwarn = str(casenum)+'_errorsandwarns.txt'
-                                filename = str(casenum)+'_systemdetails.txt'
-                                title = str('AIX_logs_'+str(casenum)).rstrip()
-                else:
-                        print('\nCase number should be numeric only')
-                        print('Usage: python script_name path_to_diagbundle case_number <optional Desc>')
-                        exit()
-
-        except Exception as e:
-                print(e)
-
-        return path,casenum,filename,errorandwarn,title
-
-##Function to set details when we have 3 arguments
-def setdetails3(argv):
-        try:
-                if argv[1].isdigit():
-                        path = argv[0]
-                        casenum = argv[1]
-                        errorandwarn = str(casenum)+'_errorsandwarns.txt'
-                        filename = str(casenum)+'_systemdetails.txt'
-                        title = str('AIX_logs_'+str(casenum)).rstrip()
-                else:
-                        print('\nCase number should be numeric only')
-                        print('Usage: python script_name path_to_diagbundle case_number <optional Desc>')
-                        exit()
-
-        except Exception as e:
-                print(e)
-
-        return path,casenum,filename,errorandwarn,title
    
 ##Main function
 def main():
     global filename
     global errorandwarn
     
-    if len(sys.argv)==4:
-        try:
-                path,casenum,filename,errorandwarn,title = setdetails4(sys.argv[1:])
-        except Exception as e:
-                print(e)
-    elif len(sys.argv)==3:
-        try:
-                path,casenum,filename,errorandwarn,title = setdetails3(sys.argv[1:])
-        except Exception as e:
-                print(e)
-    else:
-        print('\nUsage: python script_name path_to_diagbundle case_number <optional Desc>')
-        exit()
+    parse = argparse.ArgumentParser(description='Unzip/Parser and Analyze  AnalysisServer log files')
+    parse.add_argument('path',help='Path to bundle')
+    parse.add_argument('case',type=str,help='Case number should always be an Integer')
+    parse.add_argument('-o','--optional',type=str,help='Optional text to add')
+    parse.add_argument('-u','--upload',action='store_true',help='Upload to logalyzer')
+    args=  parse.parse_args()
 
-    email = str(casenum)+'@riverbedsupport.com'
-    customer = 'Global Support'
+    path = args.path
+    casenum=args.case
+    optional_text = args.optional
+    upload_flag = args.upload
+    print(upload_flag)
+
+    if not casenum.isdigit():
+        print('{} is not a digit.\nPlease enter a valid case number'.format(casenum))
+        sys.exit()
+
+
+    if optional_text==None:
+        filename = args.case+'_systemdetails.txt'
+        errorandwarn = args.case+'_errorsandwarns.txt'
+    else:
+        filename = args.case+'_'+optional_text+'_systemdetails.txt'
+        errorandwarn = args.case+'_'+optional_text+'_errorsandwarns.txt'
+
     file_name = os.path.abspath(path)
 
     try:
@@ -1737,27 +1728,31 @@ def main():
         print(e)
 
     if ((conn != ' ') and (c !=' ')):
+        try:
+            agentcount(conn,c)
+            agentsonline(conn,c)
+            agentsonffline(conn,c)
+            agtcntversion(conn,c)
 
-        agentcount(conn,c)
-        agentsonline(conn,c)
-        agentsonffline(conn,c)
-        agtcntversion(conn,c)
+            processcount(conn,c)
+            processcountlist(conn,c)
 
-        processcount(conn,c)
-        processcountlist(conn,c)
+            processmonikercount(conn,c)
+            processmonikertoinstr(conn,c)
+            processmonikernotinstr(conn,c)
 
-        processmonikercount(conn,c)
-        processmonikertoinstr(conn,c)
-        processmonikernotinstr(conn,c)
-
-        
-        dbclose(conn)
+            dbclose(conn)
+        except Exception as e:
+            print(e)
 
     navigatefolders()
-    weblinks(file_create_dir,path,filename,errorandwarn)
+#    weblinks(file_create_dir,path,filename,errorandwarn)
 
     plt.plots(casenum,file_create_dir,path)
-    upload(casenum,path)
+
+    if not upload_flag==False:
+        upload(casenum,path)
+
     permfix(file_create_dir)    
 
     end = time.time()
